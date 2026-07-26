@@ -17,6 +17,8 @@
   #legend{bottom:38px;left:18px;display:flex;gap:15px;align-items:center}
   #legend .li{display:flex;gap:6px;align-items:center;font:400 10px var(--mono);letter-spacing:.06em;color:var(--ink-3)}
   #legend .sw{width:8px;height:8px;border-radius:50%}
+  #legend .sw-ring{box-sizing:border-box;background:transparent;border:1px solid var(--ink-3)}
+  #legend .li-dim{opacity:.48}
   #counts{bottom:16px;left:18px;font:400 10px var(--mono);letter-spacing:.06em;color:#5c584f}
   #crumb{
     top:16px;right:18px;display:none;align-items:center;gap:12px;
@@ -111,4 +113,3 @@
     border:1px solid var(--line);border-radius:999px;padding:7px 13px;transition:all .16s var(--ease);
   }
   .pacts button:hover{color:var(--ink);border-color:#39404d;background:var(--bg-3)}
-

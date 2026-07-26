@@ -18,7 +18,12 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from services.cowork_agent.visualizer.argus_index import build_argus_stats
+from services.cowork_agent.visualizer.categorized_graph import (
+    build_categorized_graph,
+)
+from services.cowork_agent.visualizer.session_telemetry import (
+    build_session_telemetry,
+)
 from services.cowork_agent.visualizer.space_index import build_space_data
 
 # Bundled UI (space_ui/ at the repo root); SPACE_DIR env var overrides, e.g.
@@ -95,34 +100,143 @@ async def space_data():
     return JSONResponse(data, headers={"Cache-Control": "no-store"})
 
 
-# Argus telemetry graph — second Space dataset. Same TTL, separate cache slot.
-ARGUS_DB_DEFAULT = "~/.argus/argus.db"
+# Categorized Dashboard graph. It has the same schema as space.json, so the
+# browser reuses the atlas renderer instead of maintaining a second graph UI.
+_dashboard_cache: tuple[float, dict] | None = None
 
+
+@router.get("/data/dashboard.json")
+async def dashboard_data():
+    """XO projects collapsed into five purpose categories."""
+    global _dashboard_cache
+    now = time.monotonic()
+    if (
+        _dashboard_cache is not None
+        and now - _dashboard_cache[0] < SPACE_CACHE_TTL
+    ):
+        return JSONResponse(
+            _dashboard_cache[1], headers={"Cache-Control": "no-store"}
+        )
+
+    try:
+        data = await asyncio.to_thread(build_categorized_graph)
+    except Exception as exc:
+        print(f"⚠️ categorized graph failed ({exc})")
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "categorized_graph_unavailable",
+                "message": "Could not build the categorized project graph.",
+            },
+        )
+
+    _dashboard_cache = (now, data)
+    return JSONResponse(data, headers={"Cache-Control": "no-store"})
+
+
+# Session telemetry — second Space dataset. Same TTL, separate cache slot.
 _argus_cache: tuple[float, dict] | None = None
 
 
 @router.get("/data/sessions.json")
 async def sessions_data():
-    """Argus session-telemetry stats for the Space UI's Sessions tab.
+    """All locally available session telemetry for the Sessions tab.
 
-    DB path from ARGUS_DB (env), default ~/.argus/argus.db, expanded at
-    request time. No static fallback: a truthful 503 (the tab shows its
-    error card) beats stale pretty numbers."""
+    Providers fail independently: one readable source still yields a useful
+    response with source-status metadata. No static fallback: a truthful 503
+    when every provider is unavailable beats stale data."""
     global _argus_cache
     now = time.monotonic()
     if _argus_cache is not None and now - _argus_cache[0] < SPACE_CACHE_TTL:
         return JSONResponse(_argus_cache[1], headers={"Cache-Control": "no-store"})
 
-    db_path = Path(os.getenv("ARGUS_DB", ARGUS_DB_DEFAULT)).expanduser()
     try:
-        data = build_argus_stats(db_path)
+        data = await asyncio.to_thread(build_session_telemetry)
     except Exception as exc:
-        print(f"⚠️ argus_index failed ({exc})")
+        print(f"⚠️ session telemetry failed ({exc})")
         raise HTTPException(
             status_code=503,
-            detail={"code": "argus_db_unavailable", "message": str(exc)},
+            detail={
+                "code": "session_telemetry_unavailable",
+                "message": "No session telemetry source is currently available.",
+            },
         )
     _argus_cache = (now, data)
+    return JSONResponse(data, headers={"Cache-Control": "no-store"})
+
+
+# Aggregate telemetry never contains prompt text. Session details request one
+# transcript lazily through its provider's optional capability.
+_session_prompts_cache: dict[tuple[str, str], tuple[float, dict]] = {}
+_SESSION_PROMPTS_CACHE_MAX = 32
+
+
+@router.get("/data/session_prompts.json")
+async def session_prompts_data(agent: str, sid: str):
+    """Return user prompts for one session, grouped into human turns."""
+    from services.cowork_agent.adapters.loader import try_load_capability
+
+    now = time.monotonic()
+    hit = _session_prompts_cache.get((agent, sid))
+    if hit is not None and now - hit[0] < SPACE_CACHE_TTL:
+        return JSONResponse(hit[1], headers={"Cache-Control": "no-store"})
+
+    try:
+        module = try_load_capability("session_prompts", agent=agent)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "invalid_agent",
+                "message": f"Invalid telemetry source {agent!r}.",
+            },
+        )
+    collector = getattr(module, "collect_session_prompts", None) if module else None
+    if not callable(collector):
+        return JSONResponse(
+            {
+                "source": {"id": agent},
+                "session_id": sid,
+                "supported": False,
+                "total_prompts": 0,
+                "capped": False,
+                "prompts": [],
+            },
+            headers={"Cache-Control": "no-store"},
+        )
+
+    try:
+        data = await asyncio.to_thread(collector, sid)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "invalid_session", "message": str(exc)},
+        )
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "session_transcript_not_found",
+                "message": "No transcript found for this session.",
+            },
+        )
+    except Exception as exc:
+        print(f"⚠️ session prompts failed for {agent}:{sid} ({exc})")
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "session_prompts_unavailable",
+                "message": "Could not read this session's prompts.",
+            },
+        )
+
+    if len(_session_prompts_cache) >= _SESSION_PROMPTS_CACHE_MAX:
+        oldest = min(
+            _session_prompts_cache,
+            key=lambda key: _session_prompts_cache[key][0],
+        )
+        _session_prompts_cache.pop(oldest, None)
+    _session_prompts_cache[(agent, sid)] = (now, data)
     return JSONResponse(data, headers={"Cache-Control": "no-store"})
 
 

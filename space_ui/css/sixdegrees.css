@@ -53,4 +53,3 @@
     border:1px solid var(--line);border-radius:999px;padding:8px 16px;transition:all .16s var(--ease);
   }
   #sixtrace:hover{color:var(--ink);border-color:#39404d}
-

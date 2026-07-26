@@ -15,10 +15,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from collections import defaultdict
 from typing import Optional
 
-from services.cowork_agent.registry.agent_registry import get_active_agent
+from services.cowork_agent.adapters.loader import try_load_capability
+from services.cowork_agent.registry.agent_registry import all_agents, get_active_agent
 from services.cowork_agent.project_layout import xo_dir
 from services.cowork_agent.visualizer.ingest import jsonl_tail
 from services.cowork_agent.visualizer.ingest.events import UsageObserved
@@ -30,7 +32,7 @@ from services.cowork_agent.visualizer.sinks import (
     timeline,
     todos,
 )
-from services.cowork_agent.visualizer.source_loader import load_source_module
+from services.cowork_agent.visualizer.state import project_activity_path
 from services.cowork_agent.visualizer.workspace import (
     activity as ws_activity,
 )
@@ -53,7 +55,16 @@ from services.cowork_agent.visualizer.workspace_index import list_project_ids
 
 logger = logging.getLogger(__name__)
 
-POLL_INTERVAL_S = 1.0
+def _poll_interval_seconds() -> float:
+    raw = (os.getenv("QUIRQ_WATCHER_INTERVAL_SECONDS", "1") or "1").strip()
+    try:
+        interval = float(raw)
+    except ValueError:
+        interval = 1.0
+    return min(60.0, max(0.25, interval))
+
+
+POLL_INTERVAL_S = _poll_interval_seconds()
 
 
 class Watcher:
@@ -70,23 +81,30 @@ class Watcher:
     """
 
     def __init__(self) -> None:
-        # One source: whichever the active AGENT_NAME resolves to.
-        # See services/cowork_agent/visualizer/source_loader.py for the
-        # dispatch. Agents without a visualizer_source.py module (today:
-        # hermes) produce an empty source list — the watcher still runs
-        # so sinks can serve whatever data is already on disk.
+        # Local Docker can watch every mounted native store at once; hosted
+        # deployments retain the historical active-backend-only default.
+        # Discovery still goes through the one capability-loader seam, so a
+        # new manifest + adapter source needs no watcher edit.
         offsets = jsonl_tail.OffsetStore()
-        active_name = get_active_agent().name
-        mod = load_source_module()
-        if mod is None:
-            self.sources = []
-        else:
+        source_mode = (
+            os.getenv("QUIRQ_WATCHER_SOURCE_MODE", "active").strip().lower()
+        )
+        manifests = (
+            all_agents()
+            if source_mode == "all"
+            else [get_active_agent()]
+        )
+        self.sources = []
+        for manifest in manifests:
+            mod = try_load_capability("visualizer_source", agent=manifest.name)
+            if mod is None or not hasattr(mod, "Source"):
+                continue
             source = mod.Source(offsets=offsets)
-            assert source.name == active_name, (
+            assert source.name == manifest.name, (
                 f"visualizer_source.Source.name {source.name!r} does not match "
-                f"active agent {active_name!r}"
+                f"manifest {manifest.name!r}"
             )
-            self.sources = [source]
+            self.sources.append(source)
         self.model_by_session: dict[str, str] = {}
 
     # ── One tick ────────────────────────────────────────────────────────
@@ -137,7 +155,8 @@ class Watcher:
 
         # 5. Activity sink — driven by presence snapshot, not events.
         # Runs for every project (even those with no events this tick)
-        # so a session that exited gets evicted from activity.json.
+        # so a session that exited gets evicted from the machine-local
+        # presence snapshot under ~/.quirq/watcher/activity/.
         presence: list[dict] = []
         for src in self.sources:
             try:
@@ -163,7 +182,7 @@ class Watcher:
                 logger.exception("identity fill failed for %s", pid)
             try:
                 activity.apply(
-                    xo_dir(pid),
+                    project_activity_path(pid),
                     presence_by_project.get(pid, []),
                     model_by_session=self.model_by_session,
                 )

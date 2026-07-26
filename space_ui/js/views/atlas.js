@@ -1,5 +1,6 @@
-/* The atlas trio — Graph, Timeline, Six Degrees: three lenses over one
-   dataset (space.json). They share the model, camera, selection state and
+/* The atlas views — Dashboard, Graph, Timeline, Six Degrees: lenses over one
+   selected graph dataset. Dashboard uses dashboard.json while Graph uses
+   space.json. They share the model, camera, selection state and
    cross-view actions inside one boot() closure, so they live in one module
    exporting three views (splitting them would force cross-imports, which the
    view contract forbids). Cross-view jumps go through ctx.switchTo (`go`).
@@ -11,50 +12,90 @@ import {toast} from '../core/ui.js';
 let go=()=>{};   /* ctx.switchTo, captured on first mount */
 const hooks={};  /* boot() assigns lifecycle hooks here once it has run */
 let bootPromise=null;
+let bootDataset=null;
+
+const DATASETS={
+  dashboard:{url:'data/dashboard.json',label:'Dashboard'},
+  graph:{url:'data/space.json',label:'Graph'}
+};
+const DATASET_KEY='space.atlasDataset';
+
+function savedDataset(){
+  try{
+    const value=localStorage.getItem(DATASET_KEY);
+    return DATASETS[value]?value:'graph';
+  }catch(_err){return'graph';}
+}
+
+function rememberDataset(dataset){
+  try{localStorage.setItem(DATASET_KEY,dataset);}catch(_err){}
+}
 
 /* boot() runs exactly once, no matter which atlas lens mounts first or how
-   many mount concurrently — the cached promise is the single-flight guard. */
-function ensureBoot(){
+   many mount concurrently. Switching between the two graph projections
+   reloads once, matching main's dataset switch and resetting the simulation. */
+function ensureBoot(requestedDataset){
+  const dataset=DATASETS[requestedDataset]?requestedDataset:savedDataset();
+  if(bootPromise&&bootDataset!==dataset){
+    rememberDataset(dataset);
+    location.reload();
+    return new Promise(()=>{});
+  }
+  bootDataset=dataset;
+  rememberDataset(dataset);
   if(!bootPromise)bootPromise=(async()=>{
-    const res=await apiFetch('data/space.json');
+    const source=DATASETS[dataset];
+    const res=await apiFetch(source.url);
     if(!res.ok){
-      console.warn('Space could not load data/space.json:',res.error);
+      console.warn('Space could not load '+source.url+':',res.error);
       throw new Error(res.error);
     }
-    boot(res.data,'local file');
+    boot(res.data,source.label);
   })();
   return bootPromise;
 }
 
-function renderNoData(el){
+function renderNoData(el,dataset){
   if(!el)return;
+  const source=DATASETS[dataset]||DATASETS[savedDataset()];
   const box=document.createElement('div');
   box.className='nodata';
   box.innerHTML='<div class="eyebrow">No data source</div>'+
     '<h1>Space reads its map from a local file.</h1>'+
-    '<p>This page loads <b>data/space.json</b> from the folder it is served from, so the data stays on this machine. Serve the folder with the workspace server:</p>'+
+    '<p>This page loads <b>'+source.url+'</b> from this local server, so the data stays on this machine. Serve the folder with the workspace server:</p>'+
     '<pre>cd xo-cowork-api && ./cowork-api.sh start</pre>'+
-    '<p>then open <b>http://localhost:5002/space/</b></p>'+
+    '<p>then open <b>http://localhost:5003/space/</b></p>'+
     '<button id="nodata-retry">Retry</button>';
   el.appendChild(box);
   box.querySelector('#nodata-retry').addEventListener('click',()=>location.reload());
 }
 
-function atlasView(id,label,order,lens){
+function atlasView(id,label,order,lens,dataset=null){
   return{
     id,label,order,
     async mount(el,ctx){
       go=ctx.switchTo;
-      try{await ensureBoot();}
-      catch(err){renderNoData(el);}
+      el.querySelectorAll('[data-atlas-lens]').forEach(button=>{
+        button.addEventListener('click',()=>go(button.dataset.atlasLens));
+      });
+      try{await ensureBoot(dataset);}
+      catch(err){renderNoData(el,dataset);}
     },
     show(){if(hooks.setActiveView)hooks.setActiveView(lens);},
     hide(){if(hooks.setActiveView)hooks.setActiveView(null);}
   };
 }
-export const graphView=atlasView('graph','Graph',1,'graph');
+export const dashboardView={
+  ...atlasView('dashboard','Dashboard',0,'graph','dashboard'),
+  section:'graph'
+};
+export const graphView=atlasView('graph','Graph',1,'graph','graph');
 export const timeView=atlasView('time','Timeline',2,'time');
-export const sixView=atlasView('six','Six&nbsp;Degrees',3,'six');
+export const sixView={
+  ...atlasView('six','Six&nbsp;Degrees',3,'six'),
+  nav:false,
+  parent:'time'
+};
 
 function boot(DATA,DATA_SOURCE){
 /* ============================== MODEL FROM LOCAL DATA ==============================
@@ -62,13 +103,18 @@ function boot(DATA,DATA_SOURCE){
    Nothing is embedded here: the data lives on disk, next to this page. */
 const CAT=DATA.categories;
 const ACCENT='#a8d94f', ACCENT_DEEP='#83d63a';
+const graphRoute=bootDataset==='dashboard'?'dashboard':'graph';
+const hubLabel=DATA.meta.hubLabel||'Department';
 const NODES=[];
 NODES.push({id:DATA.root.id,type:'root',label:DATA.root.label,blurb:DATA.root.blurb});
 DATA.hubs.forEach(h=>NODES.push({id:h.id,type:'hub',cat:h.cat,label:h.label,blurb:h.blurb}));
 DATA.groups.forEach(g=>NODES.push({id:g.id,type:'group',cat:g.cat,label:g.label,blurb:g.blurb}));
-DATA.leaves.forEach(l=>NODES.push({id:l.id,type:'leaf',group:l.group,shape:l.shape,tag:l.tag,label:l.label,date:l.date,blurb:l.blurb,path:l.path}));
+DATA.leaves.forEach(l=>NODES.push({
+  id:l.id,type:'leaf',group:l.group,shape:l.shape,tag:l.tag,label:l.label,
+  date:l.date,blurb:l.blurb,path:l.path,clusters:l.clusters||[],xotype:l.xotype
+}));
 const EDGES=[];
-DATA.hubs.forEach(h=>EDGES.push({s:DATA.root.id,t:h.id,kind:'root',label:'a department of XO'}));
+DATA.hubs.forEach(h=>EDGES.push({s:DATA.root.id,t:h.id,kind:'root',label:DATA.meta.rootEdgeLabel||'a department of XO'}));
 DATA.groups.forEach(g=>EDGES.push({s:g.cat,t:g.id,kind:'hg',label:'part of'}));
 DATA.leaves.forEach(l=>EDGES.push({s:l.group,t:l.id,kind:'rg',label:'part of'}));
 DATA.ties.forEach(x=>EDGES.push({s:x.s,t:x.t,kind:'x',label:x.label}));
@@ -85,11 +131,22 @@ const LEAVES=NODES.filter(n=>n.type==='leaf');
 const GROUPS=NODES.filter(n=>n.type==='group');
 const HUBS=NODES.filter(n=>n.type==='hub');
 const XCOUNT=EDGES.filter(e=>e.kind==='x').length;
-document.getElementById('q').placeholder=`Search ${LEAVES.length} artifacts…`;
+const noun=DATA.meta.noun||'artifacts';
+const collectionLabel=DATA.meta.collectionLabel||'clusters';
+document.getElementById('q').placeholder=`Search ${LEAVES.length} ${noun}…`;
 document.getElementById('fmeta').textContent=
-  `${LEAVES.length} artifacts · ${GROUPS.length} clusters · ${EDGES.length} links · mapped ${DATA.meta.mappedOn} · data: ${DATA_SOURCE}`;
-document.getElementById('intro-p').textContent=
-  `Wander through ${LEAVES.length} artifacts across four departments of XO: the repos, papers, decks, and experiments that bind thirteen months of work together.`;
+  `${LEAVES.length} ${noun} · ${GROUPS.length} ${collectionLabel} · ${EDGES.length} links · mapped ${DATA.meta.mappedOn} · data: ${DATA_SOURCE}`;
+const intro=document.getElementById('intro');
+if(DATA.meta.introEyebrow)intro.querySelector('.eyebrow').textContent=DATA.meta.introEyebrow;
+if(DATA.meta.introTitle)intro.querySelector('h1').textContent=DATA.meta.introTitle;
+document.getElementById('intro-p').textContent=DATA.meta.intro||
+  `Wander through ${LEAVES.length} artifacts across the XO workspace.`;
+if(DATA.meta.timelineTitle){
+  document.querySelector('#view-time .thead h2').textContent=DATA.meta.timelineTitle;
+}
+if(DATA.meta.timelineSub){
+  document.getElementById('tsub').textContent=DATA.meta.timelineSub;
+}
 
 const colorOf=n=>n.type==='root'?'#e9e4d9':CAT[n.cat].color;
 function radiusOf(n){
@@ -108,15 +165,16 @@ const REDUCED=matchMedia('(prefers-reduced-motion: reduce)').matches;
 /* expansion + filter state */
 const expanded=new Map(GROUPS.map(g=>[g.id,true]));
 let deptFilter=null;
+const belongsToCategory=(n,cat)=>n.cat===cat||(n.clusters||[]).includes(cat);
 const isShown=n=>{
   if(n.type==='leaf'){
     if(!expanded.get(n.group))return false;
-    if(deptFilter&&n.cat!==deptFilter)return false;
+    if(deptFilter&&!belongsToCategory(n,deptFilter))return false;
     return true;
   }
   return true;
 };
-const dimByFilter=n=>deptFilter&&n.cat&&n.cat!==deptFilter;
+const dimByFilter=n=>deptFilter&&n.cat&&!belongsToCategory(n,deptFilter);
 const shownNodes=()=>NODES.filter(isShown);
 const shownEdges=()=>EDGES.filter(e=>isShown(byId.get(e.s))&&isShown(byId.get(e.t)));
 
@@ -152,7 +210,12 @@ LEAVES.forEach((l,i)=>{
 /* ============================== SIMULATION ============================== */
 let simAlpha=1;
 let rootId=DATA.root.id,rootDepths=null;
-const SPR={root:{d:HUB_R,k:.02},hg:{d:175,k:.05},rg:{d:62,k:.08},x:{d:210,k:.005}};
+const SPR={
+  root:{d:HUB_R,k:.02},
+  hg:{d:175,k:.05},
+  rg:{d:62,k:.08},
+  x:DATA.meta.tieSpring||{d:210,k:.005}
+};
 const CHG={root:-3400,hub:-2600,group:-1000,leaf:-235};
 function simTick(){
   const vs=shownNodes(),es=shownEdges();
@@ -255,7 +318,70 @@ function neighborhood(id,depth){
 function drawShape(c,x,y,r,shape){
   c.beginPath();
   if(shape==='diamond'){const s=r*1.25;c.moveTo(x,y-s);c.lineTo(x+s,y);c.lineTo(x,y+s);c.lineTo(x-s,y);c.closePath();}
+  else if(shape==='slab'){const w=r*1.55,h=r*.95;c.rect(x-w,y-h,w*2,h*2);}
+  else if(shape==='stack'){const s=r*.92,o=r*.38;c.rect(x-s-o,y-s+o,s*2,s*2);c.rect(x-s+o,y-s-o,s*2,s*2);}
   else c.arc(x,y,r,0,Math.PI*2);
+}
+function convexHull(points){
+  const pts=[...points].sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
+  if(pts.length<=1)return pts;
+  const cross=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);
+  const lower=[];
+  for(const point of pts){
+    while(lower.length>=2&&cross(lower.at(-2),lower.at(-1),point)<=0)lower.pop();
+    lower.push(point);
+  }
+  const upper=[];
+  for(let i=pts.length-1;i>=0;i--){
+    const point=pts[i];
+    while(upper.length>=2&&cross(upper.at(-2),upper.at(-1),point)<=0)upper.pop();
+    upper.push(point);
+  }
+  lower.pop();upper.pop();
+  return lower.concat(upper);
+}
+function drawEnclosures(k){
+  const PAD=42;
+  for(const group of GROUPS){
+    if(deptFilter&&group.cat!==deptFilter)continue;
+    const points=[[group.x,group.y]];
+    for(const leaf of LEAVES){
+      if(isShown(leaf)&&belongsToCategory(leaf,group.cat)){
+        points.push([leaf.x,leaf.y]);
+      }
+    }
+    if(points.length<2)continue;
+    const col=CAT[group.cat]?.color||'#888888';
+    const cx=points.reduce((sum,point)=>sum+point[0],0)/points.length;
+    const cy=points.reduce((sum,point)=>sum+point[1],0)/points.length;
+    gc.beginPath();
+    if(points.length===2){
+      const radius=Math.hypot(points[1][0]-points[0][0],points[1][1]-points[0][1])/2+PAD;
+      gc.arc(cx,cy,radius,0,Math.PI*2);
+    }else{
+      const hull=convexHull(points).map(point=>{
+        const dx=point[0]-cx,dy=point[1]-cy;
+        const distance=Math.hypot(dx,dy)||1;
+        return [point[0]+dx/distance*PAD,point[1]+dy/distance*PAD];
+      });
+      const first=hull[0],last=hull.at(-1);
+      gc.moveTo((last[0]+first[0])/2,(last[1]+first[1])/2);
+      for(let i=0;i<hull.length;i++){
+        const point=hull[i],next=hull[(i+1)%hull.length];
+        gc.quadraticCurveTo(
+          point[0],point[1],
+          (point[0]+next[0])/2,(point[1]+next[1])/2
+        );
+      }
+      gc.closePath();
+    }
+    gc.fillStyle=hexA(col,.055);gc.fill();
+    gc.setLineDash([5/k,4/k]);
+    gc.strokeStyle=hexA(col,.32);
+    gc.lineWidth=1.2/Math.sqrt(k);
+    gc.stroke();
+    gc.setLineDash([]);
+  }
 }
 function drawGraph(now){
   gc.setTransform(dpr,0,0,dpr,0,0);
@@ -273,6 +399,7 @@ function drawGraph(now){
   gc.setTransform(dpr*k,0,0,dpr*k,dpr*(GW/2-cam.x*k),dpr*(GH/2-cam.y*k));
   const es=shownEdges(),vs=shownNodes();
   const inFocus=id=>!focusSet||focusSet.has(id);
+  if(DATA.meta.enclose)drawEnclosures(k);
   /* path reveal progress */
   let revealSeg=1e9;
   if(pathIds){
@@ -281,6 +408,7 @@ function drawGraph(now){
   }
   /* ---- edges ---- */
   for(const e of es){
+    if(DATA.meta.enclose&&deptFilter&&e.kind==='root')continue;
     const a=byId.get(e.s),b=byId.get(e.t);
     let alpha,width,color;
     if(pathIds){
@@ -309,6 +437,7 @@ function drawGraph(now){
   /* ---- nodes ---- */
   const drawOrder=pathIds?[...vs].sort((a,b)=>(pathIds.includes(a.id)?1:0)-(pathIds.includes(b.id)?1:0)):vs;
   for(const n of drawOrder){
+    if(DATA.meta.enclose&&deptFilter&&n.type==='root')continue;
     const col=colorOf(n);
     let a=1;
     if(pathIds)a=pathIds.includes(n.id)?1:.10;
@@ -386,13 +515,15 @@ function drawGraph(now){
       gc.font='500 17px '+SERIF;
       halo(n.label,sx,sy-n.r*k-12,`rgba(233,228,217,${.94*a})`);
       gc.font='400 8.5px '+MONO;
-      halo(`${LEAVES.filter(l=>l.cat===n.cat).length} ARTIFACTS`,sx,sy+n.r*k+16,`rgba(125,120,109,${a})`,.14);
+      const hubCount=LEAVES.filter(l=>belongsToCategory(l,n.cat)).length;
+      const hubNoun=hubCount===1?noun.replace(/s$/,''):noun;
+      halo(`${hubCount} ${hubNoun.toUpperCase()}`,sx,sy+n.r*k+16,`rgba(125,120,109,${a})`,.14);
     }else if(n.type==='group'){
       const on=n.id===hoverId||n.id===selId||(focusSet&&focusSet.has(n.id));
       if(!(on||k>.8))continue;
       const closed=!expanded.get(n.id);
       gc.font='400 9px '+MONO;
-      const t=n.label.toUpperCase()+(closed?` +${LEAVES.filter(l=>l.group===n.id).length}`:'');
+      const t=n.label.toUpperCase()+(closed?` +${LEAVES.filter(l=>belongsToCategory(l,n.cat)).length}`:'');
       halo(t,sx,sy-n.r*k-7,`rgba(179,173,160,${.72*a})`,.1);
     }else if(n.type==='leaf'){
       const on=n.id===hoverId||n.id===selId||n.id===rootId||(focusSet&&focusSet.has(n.id))||(pathIds&&pathIds.includes(n.id));
@@ -594,7 +725,7 @@ function setRoot(id){
   clearFocus();clearPath();
   document.getElementById('root-name').textContent=r.label;
   reheat(.8);
-  go('graph');
+  go(graphRoute);
   flyTo(r.fx,r.fy,Math.min(Math.max(cam.k,.55),.9),900);
   toast(id===DATA.root.id?'Back to the full space':'Rooted on '+r.label);
   closeRootDD();
@@ -635,19 +766,32 @@ chipDefs.forEach(d=>{
 /* legend + counts */
 {
   const lg=document.getElementById('legend');
-  lg.innerHTML=Object.values(CAT).map(c=>`<span class="li"><span class="sw" style="background:${c.color}"></span>${c.name}</span>`).join('')+
-   `<span class="li" style="margin-left:6px"><svg width="10" height="10"><circle cx="5" cy="5" r="3.6" fill="#b3ada0"/></svg>code</span>
-    <span class="li"><svg width="10" height="10"><circle cx="5" cy="5" r="3.1" fill="none" stroke="#b3ada0" stroke-width="1.4"/></svg>document</span>
-    <span class="li"><svg width="10" height="10"><rect x="5" y="0.9" width="5.8" height="5.8" fill="#b3ada0" transform="rotate(45 5 5)"/></svg>experiment</span>`;
+  const glyph={
+    disc:'<svg width="10" height="10"><circle cx="5" cy="5" r="3.6" fill="#b3ada0"/></svg>',
+    ring:'<svg width="10" height="10"><circle cx="5" cy="5" r="3.1" fill="none" stroke="#b3ada0" stroke-width="1.4"/></svg>',
+    diamond:'<svg width="10" height="10"><path d="M5 .9 9.1 5 5 9.1.9 5Z" fill="#b3ada0"/></svg>',
+    stack:'<svg width="11" height="10"><rect x="1" y="3" width="6" height="6" fill="none" stroke="#b3ada0"/><rect x="4" y="1" width="6" height="6" fill="#b3ada0"/></svg>',
+    slab:'<svg width="12" height="10"><rect x=".5" y="2.7" width="11" height="4.6" fill="#b3ada0"/></svg>'
+  };
+  const shapeDefs=DATA.meta.shapeLegend||[
+    {shape:'disc',label:'code'},
+    {shape:'ring',label:'document'},
+    {shape:'diamond',label:'experiment'}
+  ];
+  const typeDefs=DATA.meta.typeLegend||[];
+  lg.innerHTML=
+    Object.values(CAT).map(c=>`<span class="li"><span class="sw" style="background:${c.color}"></span>${esc(c.name)}</span>`).join('')+
+    shapeDefs.map((d,i)=>`<span class="li"${i===0?' style="margin-left:6px"':''}>${glyph[d.shape]||glyph.disc}${esc(d.label)}</span>`).join('')+
+    typeDefs.map((d,i)=>`<span class="li${d.weight==='dim'?' li-dim':''}"${i===0?' style="margin-left:6px"':''}><span class="sw sw-ring"></span>${esc(d.label.toLowerCase())}</span>`).join('');
   document.getElementById('counts').textContent=
-    `${LEAVES.length} artifacts · ${GROUPS.length} clusters · ${EDGES.length} links · ${XCOUNT} cross-ties`;
+    `${LEAVES.length} ${noun} · ${GROUPS.length} ${collectionLabel} · ${EDGES.length} links · ${XCOUNT} cross-ties`;
 }
 
 /* ============================== HOVER CARD ============================== */
 const hc=document.getElementById('hc');
 function showHC(n,mx,my){
   const col=n.type==='root'?ACCENT_DEEP:CAT[n.cat].color;
-  const kick=n.type==='hub'?'Department':n.type==='group'?'Cluster':n.type==='root'?'The center':`${CAT[n.cat].name} · ${n.tag}`;
+  const kick=n.type==='hub'?hubLabel:n.type==='group'?'Cluster':n.type==='root'?'The center':`${CAT[n.cat].name} · ${n.tag}`;
   const art=`linear-gradient(155deg, ${hexA(col,.24)}, ${hexA(col,.03)} 68%)`;
   let rows='';
   if(n.type==='leaf'){
@@ -657,13 +801,15 @@ function showHC(n,mx,my){
       <dt>Ties</dt><dd>${n.degree-1} connection${n.degree-1===1?'':'s'} · ${esc(byId.get(n.group).label)}</dd>
     </dl>`;
   }else if(n.type==='group'){
-    const kids=LEAVES.filter(l=>l.group===n.id);
-    const d0=kids.reduce((m,x)=>x.date<m?x.date:m,'9999'),d1=kids.reduce((m,x)=>x.date>m?x.date:m,'0000');
-    rows=`<dl><dt>Holds</dt><dd>${kids.length} artifacts</dd>
-      <dt>Span</dt><dd>${fmtMY(+new Date(d0))} to ${fmtMY(+new Date(d1))}</dd></dl>`;
+    const kids=LEAVES.filter(l=>belongsToCategory(l,n.cat));
+    const dates=kids.map(x=>x.date).sort();
+    const span=dates.length
+      ?`<dt>Span</dt><dd>${fmtMY(+new Date(dates[0]))} to ${fmtMY(+new Date(dates.at(-1)))}</dd>`
+      :'';
+    rows=`<dl><dt>Holds</dt><dd>${kids.length} ${noun}</dd>${span}</dl>`;
   }else{
-    const kids=n.type==='hub'?LEAVES.filter(l=>l.cat===n.cat):LEAVES;
-    rows=`<dl><dt>Holds</dt><dd>${kids.length} artifacts</dd></dl>`;
+    const kids=n.type==='hub'?LEAVES.filter(l=>belongsToCategory(l,n.cat)):LEAVES;
+    rows=`<dl><dt>Holds</dt><dd>${kids.length} ${noun}</dd></dl>`;
   }
   hc.innerHTML=`
     <div class="art" style="background:${art}">
@@ -686,8 +832,8 @@ function hideHC(){hc.classList.remove('is-on');hoverId=null;}
 const panel=document.getElementById('panel');
 function openPanel(n){
   const col=n.type==='root'?ACCENT_DEEP:CAT[n.cat].color;
-  const kick=n.type==='hub'?`Department · ${LEAVES.filter(l=>l.cat===n.cat).length} artifacts`
-    :n.type==='group'?`${CAT[n.cat].name} · cluster`
+  const kick=n.type==='hub'?`${hubLabel} · ${LEAVES.filter(l=>belongsToCategory(l,n.cat)).length} ${noun}`
+    :n.type==='group'?`${CAT[n.cat].name} · environment`
     :n.type==='root'?'The center'
     :`${CAT[n.cat].name} · ${n.tag}`;
   const conns=n.adj
@@ -730,7 +876,7 @@ panel.addEventListener('click',e=>{
   if(c){
     const n=byId.get(c.dataset.id);
     ensureShown(n);
-    go('graph');
+    go(graphRoute);
     select(n.id,1);
     pulseN={id:n.id,t0:performance.now()};
     return;
@@ -744,7 +890,7 @@ panel.addEventListener('click',e=>{
 });
 function ensureShown(n){
   if(n.type==='leaf'){
-    if(deptFilter&&n.cat!==deptFilter){
+    if(deptFilter&&!belongsToCategory(n,deptFilter)){
       deptFilter=null;
       [...chipsEl.children].forEach((x,i)=>x.classList.toggle('is-on',i===0));
       toast('Filter cleared to reach '+n.label);
@@ -784,7 +930,7 @@ function acRow(n,idx,q){
 function wireAC(input,acEl,onPick){
   let items=[],act=-1;
   const render=q=>{
-    if(!items.length&&q){acEl.innerHTML=`<div class="empty">No match in this workspace<small>${LEAVES.length} artifacts mapped</small></div>`;acEl.classList.add('is-open');return;}
+    if(!items.length&&q){acEl.innerHTML=`<div class="empty">No match in this workspace<small>${LEAVES.length} ${noun} mapped</small></div>`;acEl.classList.add('is-open');return;}
     acEl.innerHTML=items.map(([sc,n,idx],i)=>{
       const r=acRow(n,idx,q);
       return `<button class="${i===act?'is-active':''}" data-i="${i}">
@@ -814,7 +960,7 @@ function wireAC(input,acEl,onPick){
 }
 wireAC(document.getElementById('q'),document.getElementById('qac'),n=>{
   ensureShown(n);
-  go('graph');
+  go(graphRoute);
   clearPath();
   select(n.id,1,false);
   const kT=n.type==='leaf'?2.2:1.3;
@@ -835,6 +981,9 @@ document.getElementById('root-q').addEventListener('keydown',e=>{
 let view='graph';
 hooks.setActiveView=v=>{
   view=v;
+  document.querySelectorAll('[data-atlas-lens]').forEach(button=>{
+    button.classList.toggle('is-on',button.dataset.atlasLens===v);
+  });
   hideHC();
   if(v==='graph'&&GW<50)resize(); /* booted while hidden (deep link): size the canvas now */
   if(v==='time'){requestAnimationFrame(()=>{buildTimeline();if(tTrace)drawTrace();});}
@@ -989,17 +1138,22 @@ function renderTimelineState(){
   document.getElementById('tscrub').value=Math.round((tNow-T0)/(T1-T0)*1000);
 }
 function traceOnTimeline(n){
-  const ids=n.type==='group'?LEAVES.filter(l=>l.group===n.id):
-            n.type==='hub'?LEAVES.filter(l=>l.cat===n.cat):[n];
+  const ids=n.type==='group'||n.type==='hub'
+    ?LEAVES.filter(l=>belongsToCategory(l,n.cat)):[n];
   const list=ids.slice().sort((a,b)=>a.date<b.date?-1:1);
   tTrace={ids:new Set(list.map(x=>x.id)),list,label:n.label};
   go('time');
   requestAnimationFrame(()=>{
+    if(!list.length){
+      document.getElementById('tsub').textContent=`${n.label} has no mapped ${noun}.`;
+      document.getElementById('tclear').hidden=false;
+      return;
+    }
     drawTrace();
     document.getElementById('tclear').hidden=false;
     const m0=fmtMY(+new Date(list[0].date)),m1=fmtMY(+new Date(list[list.length-1].date));
     document.getElementById('tsub').textContent=
-      `${n.label}: ${list.length} artifact${list.length===1?'':'s'}, ${m0===m1?m0:m0+' to '+m1}.`;
+      `${n.label}: ${list.length} ${noun}, ${m0===m1?m0:m0+' to '+m1}.`;
     if(!REDUCED){
       tNow=+new Date(list[0].date+'T00:00:00')-86400000*7;
       startPlay();
@@ -1042,7 +1196,8 @@ function drawTrace(){
 function clearTrace(){
   tTrace=null;
   document.getElementById('tclear').hidden=true;
-  document.getElementById('tsub').textContent='Scrub through the workspace as it grew. Open any cluster from the graph to watch its run unfold here.';
+  document.getElementById('tsub').textContent=DATA.meta.timelineSub||
+    'Scrub through the workspace as it grew. Open any cluster from the graph to watch its run unfold here.';
   const g=tsvg.querySelector('#ttrace');if(g)g.innerHTML='';
   renderTimelineState();
 }
@@ -1084,7 +1239,7 @@ tsvg.addEventListener('click',e=>{
   if(t.dataset&&t.dataset.id){
     const n=byId.get(t.dataset.id);
     ensureShown(n);
-    go('graph');
+    go(graphRoute);
     select(n.id,1);
     pulseN={id:n.id,t0:performance.now()};
   }
@@ -1119,15 +1274,15 @@ function shortest(aId,bId){
 function relText(e,fromId){
   if(!e)return'';
   if(e.kind==='x')return e.label;
-  if(e.kind==='root')return'a department of XO';
+  if(e.kind==='root')return DATA.meta.rootEdgeLabel||'a department of XO';
   const child=byId.get(e.t),parent=byId.get(e.s);
   return fromId===child.id?`part of ${parent.label}`:`holds ${child.label}`;
 }
 function runSix(){
   const err=document.getElementById('sixerr');
   err.textContent='';
-  if(!sixA||!sixB){err.textContent='Pick two artifacts first.';return;}
-  if(sixA.id===sixB.id){err.textContent='That is the same artifact. Try two different names.';return;}
+  if(!sixA||!sixB){err.textContent=`Pick two ${noun} first.`;return;}
+  if(sixA.id===sixB.id){err.textContent=`That is the same ${noun.slice(0,-1)||noun}. Try two different names.`;return;}
   sixPath=shortest(sixA.id,sixB.id);
   if(!sixPath){err.textContent=`No route connects ${sixA.label} and ${sixB.label} in this space.`;return;}
   const deg=sixPath.length-1;
@@ -1137,7 +1292,7 @@ function runSix(){
     <div class="chain">${sixPath.map((h,i)=>{
       const n=byId.get(h.id);
       const col=n.cat?CAT[n.cat].color:'#e9e4d9';
-      const meta=n.type==='hub'?'department':n.type==='group'?'cluster':n.tag;
+      const meta=n.type==='hub'?hubLabel.toLowerCase():n.type==='group'?'cluster':n.tag;
       const card=`<div class="ncard" style="animation-delay:${i*130}ms">
         <span class="cdot" style="background:${col}"></span>
         <span class="nm">${esc(n.label)}</span><span class="meta">${esc(meta||'')}</span></div>`;
@@ -1151,7 +1306,7 @@ function runSix(){
 function chainSentence(e){
   const s=byId.get(e.s),t=byId.get(e.t);
   if(e.kind==='x')return`${s.label} ${e.label} ${t.label}`;
-  if(e.kind==='root')return`${t.label} is a department of XO`;
+  if(e.kind==='root')return`${t.label} is ${DATA.meta.rootEdgeLabel||'a department of XO'}`;
   return`${t.label} is part of ${s.label}`;
 }
 function traceSixOnGraph(){
@@ -1161,7 +1316,7 @@ function traceSixOnGraph(){
   pathEdges=sixPath.filter(h=>h.e).map(h=>h.e);
   pathIds.forEach(id=>ensureShown(byId.get(id)));
   reheat(.35);
-  go('graph');
+  go(graphRoute);
   pathReveal=performance.now()+350;
   setTimeout(()=>fitNodes(pathIds,240),380);
 }

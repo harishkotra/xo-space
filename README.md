@@ -77,32 +77,25 @@ Every coding agent ships with its own session store, its own auth, its own todo 
 ## Quick start
 
 ```bash
-# 1. Clone
-git clone https://github.com/sharmasuraj0123/xo-cowork-api.git
-cd xo-cowork-api
-
-# 2. Install dependencies (Python 3.12+)
-pip install -r requirements.txt
-
-# 3. Configure
-cp .env.example .env       # then edit — see Configuration below
-
-# 4. Boot a runtime (pick at least one)
-claude /login                                  # Claude Code
-# or
-bash config/agents/openclaw/agent.sh start     # OpenClaw gateway on :18789
-
-# 5. Run
-python server.py           # http://localhost:5002
-
-# or with auto-reload for development:
-uvicorn server:app --host 0.0.0.0 --port 5002 --reload
+curl -fsSL https://raw.githubusercontent.com/sharmasuraj0123/xo-cowork-api/main/install.sh | bash
 ```
+
+Open <http://localhost:5003/space/>. The command starts Docker in the
+background, waits until the API is healthy, prints the URL, and returns control
+to your terminal. No clone, Python environment, or local checkout is required.
+Project data and machine-local Quirq state remain on the host through separate
+bind mounts. Agent-native data directories declared by the installed manifests
+are mounted too, so the Setup tab can inspect existing Claude Code, OpenClaw,
+Hermes, and other supported session stores without mounting the rest of the
+home directory.
+
+See the short [Docker installation guide](INSTALLATION.md) for the storage
+mounts and stop command.
 
 Verify it's up:
 
 ```bash
-curl http://localhost:5002/health
+curl http://localhost:5003/health
 ```
 
 ```jsonc
@@ -117,9 +110,17 @@ curl http://localhost:5002/health
 
 ### Process management
 
-`cowork-api.sh` wraps the server with PID-file management and log redirection:
+Stop the installed container with:
 
 ```bash
+docker stop quirq
+```
+
+Backend contributors can still use the native process manager:
+
+```bash
+./cowork-api.sh dev        # native venv + reload
+./cowork-api.sh install    # dependencies only
 ./cowork-api.sh start      # daemon
 ./cowork-api.sh status
 ./cowork-api.sh logs       # tail -f
@@ -226,11 +227,24 @@ Every shared project is a folder under `~/xo-projects/<id>/` with a canonical la
 └── .xo/                ← metadata-only — safe to share
     ├── project.json
     ├── sessions/sessionslist.json   ← sessionId ↔ runtime, NO message content
-    ├── todos.json, stats.json, timeline.jsonl, activity.json
-    └── sync.json, peers.json, policy.json
+    ├── todos.json, stats.json, timeline.jsonl
+    └── sync.json, peers.json
 ```
 
 **The structural confidentiality guarantee:** no code path writes chat content into `~/xo-projects/`. Conversations live in the runtime's own home (`~/.claude/`, `~/.openclaw/`, `~/.codex/`), which never leaves the machine. A project folder can be `tar`'d, sync'd, or pushed to git without leaking session history or credentials.
+
+Live presence is intentionally machine-local rather than project metadata:
+the watcher writes per-project snapshots under
+`~/.quirq/watcher/activity/projects/` and exposes them through
+`GET /api/xo-projects/{id}/activity`.
+
+All Quirq installation state now lives under `~/.quirq/`: onboarding state,
+typed runtime settings and write-only credentials saved through the Setup tab,
+watcher cursors, advisory locks, and live presence. The local Docker watcher
+can combine every mounted runtime source while keeping one selected backend
+for new chats. Existing
+`~/.xo-cowork/` onboarding/cursor files are accepted as a read-only migration
+source, but every new write targets `~/.quirq/`.
 
 Create a project with the scaffolding endpoint:
 
@@ -322,6 +336,10 @@ xo-cowork-api/
 ├── cowork-update.sh                git pull + restart in background
 ├── DEVELOPING.md                   engineering guide — architecture, adding an agent, validation
 ├── Dockerfile
+├── compose.local.yml               local Docker service and host mounts
+├── quirq                           one-command Docker launcher
+├── install.sh                      no-clone remote installer
+├── INSTALLATION.md                 short local installation guide
 └── requirements.txt
 ```
 
