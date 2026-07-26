@@ -3,7 +3,7 @@
 Start Docker, then run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sharmasuraj0123/xo-cowork-api/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/quirq-ai/xo-space/development/install.sh | bash
 ```
 
 Open <http://localhost:5003/space/>.
@@ -41,13 +41,13 @@ restart an installer-managed container and reconnect automatically.
 For a custom projects directory, keep it to one command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sharmasuraj0123/xo-cowork-api/main/install.sh | XO_PROJECTS_ROOT=/absolute/path bash
+curl -fsSL https://raw.githubusercontent.com/quirq-ai/xo-space/development/install.sh | XO_PROJECTS_ROOT=/absolute/path bash
 ```
 
 To set both roots on first install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sharmasuraj0123/xo-cowork-api/main/install.sh | XO_PROJECTS_ROOT=/absolute/projects QUIRQ_STATE_ROOT=/absolute/state bash
+curl -fsSL https://raw.githubusercontent.com/quirq-ai/xo-space/development/install.sh | XO_PROJECTS_ROOT=/absolute/projects QUIRQ_STATE_ROOT=/absolute/state bash
 ```
 
 Updates automatically preserve the directories mounted by the previous Quirq

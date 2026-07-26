@@ -2,9 +2,9 @@
 
 set -Eeuo pipefail
 
-IMAGE="${QUIRQ_IMAGE:-ghcr.io/sharmasuraj0123/xo-cowork-api:latest}"
-SOURCE_REF="${QUIRQ_SOURCE_REF:-main}"
-SOURCE_ARCHIVE="https://github.com/sharmasuraj0123/xo-cowork-api/archive/refs/heads/${SOURCE_REF}.tar.gz"
+IMAGE="${QUIRQ_IMAGE:-ghcr.io/quirq-ai/xo-space:latest}"
+SOURCE_REF="${QUIRQ_SOURCE_REF:-development}"
+SOURCE_ARCHIVE="https://github.com/quirq-ai/xo-space/archive/refs/heads/${SOURCE_REF}.tar.gz"
 CONTAINER_NAME="${QUIRQ_CONTAINER_NAME:-quirq}"
 APP_URL="http://localhost:5003/space/"
 MANAGED_LABEL="io.quirq.managed"
