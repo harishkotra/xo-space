@@ -28,6 +28,7 @@ directly. Descended from the single-file xo-atlas `v3.html`.
 | `js/views/sessions.js` | The Sessions (Argus telemetry) view. |
 | `js/views/projects.js` | The Projects view: xo-projects observability — project list with per-project drawers for live todos, open sessions, and recent timeline events (read-only v1). |
 | `js/views/chat.js` | The Chat view: Plane-B chat (`/api/chat/prompt` → SSE stream → transcript refetch) with session sidebar, project binding for new sessions, and mini-markdown rendering. Works across claude_code / hermes / openclaw. |
+| `js/views/wiki.js` | The Wiki view: bundled, version-matched operating documentation. It includes storage architecture, watcher internals, complete `.xo` / `.quirq` data catalogs, and flow-building recipes. |
 | `js/core/markdown.js` | Escape-first mini-markdown (fences, inline code, bold/italic, links, headings, lists). |
 
 See `AGENTS.md` in this folder for the view contract and working rules.

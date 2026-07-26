@@ -130,19 +130,23 @@ EOF
 }
 
 # ==============================================================
-# Step 3 — Materialise $REPO_ROOT/.env from environment vars if
-# the file isn't already present. xo-cowork-api's load_dotenv()
-# reads this on import; the Claude CLI is then invoked with the
-# resulting process env.
-# Manual edits are preserved: never overwrites an existing .env.
+# Step 3 — Materialise $REPO_ROOT/.env from environment vars.
+# xo-cowork-api's load_dotenv() reads this on import; the Claude CLI is
+# then invoked with the resulting process env. Hosted workspace edits are
+# preserved. Managed local Quirq refreshes the file on every boot so values
+# saved by the Setup tab in ~/.quirq/secrets.env take effect.
 # ==============================================================
 write_env_file() {
-    if [ -f "$ENV_FILE" ]; then
+    if [ -f "$ENV_FILE" ] && [ "${QUIRQ_MANAGED_CONTAINER:-false}" != "true" ]; then
         log ".env already exists at $ENV_FILE — leaving it untouched"
         return 0
     fi
 
-    log "Writing .env from environment (first time)"
+    if [ "${QUIRQ_MANAGED_CONTAINER:-false}" = "true" ]; then
+        log "Refreshing .env from managed Quirq configuration"
+    else
+        log "Writing .env from environment (first time)"
+    fi
     umask 077
     cat > "$ENV_FILE" <<ENVEOF
 # Agent dispatch
@@ -164,20 +168,32 @@ ENVEOF
 }
 
 # ==============================================================
-# Step 4 — Claude CLI sanity check. The CLI itself is installed by
-# the Coder template's startup_script (parity with the hermes and
-# openclaw templates, which all install Claude CLI as a general
-# coding tool). This step only logs whether it landed on PATH so
-# missing installs surface in the cowork-api boot log instead of
-# only at first /ask_question.
+# Step 4 — Ensure the Claude CLI exists. Hosted workspaces normally bake it
+# into the base image; the standalone Docker installer does not. Installing
+# on demand keeps both environments idempotent and makes the local setup
+# self-contained after the user selects this backend.
 # ==============================================================
-check_claude_cli() {
+ensure_claude_cli() {
     export PATH="$HOME/.claude/bin:$HOME/.local/bin:$PATH"
     if command -v claude >/dev/null 2>&1; then
         log_success "claude CLI on PATH at $(command -v claude)"
-    else
-        log_warn "claude CLI not on PATH — template install may have failed; /ask_question will 500"
+        return 0
     fi
+    if ! command -v npm >/dev/null 2>&1; then
+        log_warn "npm is unavailable — cannot install the Claude CLI"
+        return 1
+    fi
+
+    log "Claude CLI not found — installing @anthropic-ai/claude-code"
+    if npm install -g @anthropic-ai/claude-code; then
+        hash -r
+        if command -v claude >/dev/null 2>&1; then
+            log_success "claude CLI installed at $(command -v claude)"
+            return 0
+        fi
+    fi
+    log_warn "Claude CLI installation did not produce a usable 'claude' command"
+    return 1
 }
 
 # ==============================================================
@@ -263,13 +279,56 @@ CHAIN
 }
 
 # ==============================================================
+# Step 6 — Remote Control gate seeding (~/.claude.json).
+# `claude remote-control` shows two interactive gates on first use: the
+# workspace-trust dialog and an "Enable Remote Control?" prompt. Pre-clear both
+# so the API can launch it headless: home-dir trust (inherited by every dir
+# under it, xo-projects included) and the enable dialog. Idempotent: skips the
+# write when both are already set, so it never races the CLI (which rewrites
+# ~/.claude.json on exit). Also re-checked by remote_control.ensure_gates_seeded().
+# ==============================================================
+seed_remote_control_config() {
+    local cfg="$HOME/.claude.json"
+    local root="${XO_RC_DIR:-$HOME}"
+    root="${root/#\~/$HOME}"
+    root="$(cd "$root" 2>/dev/null && pwd -P || echo "$root")"
+
+    if ! command -v jq >/dev/null 2>&1; then
+        log_warn "jq not found — skipping Remote Control gate seed"
+        return 0
+    fi
+
+    local current='{}'
+    [ -s "$cfg" ] && current="$(cat "$cfg")"
+
+    if printf '%s' "$current" | jq -e --arg r "$root" \
+        '(.remoteDialogSeen == true) and (.projects[$r].hasTrustDialogAccepted == true)' \
+        >/dev/null 2>&1; then
+        log "Remote Control gates already seeded (trust: $root)"
+        return 0
+    fi
+
+    local tmp; tmp="$(mktemp "${cfg}.xo-rc.XXXXXX")"
+    if printf '%s' "$current" | jq --arg r "$root" \
+        '.remoteDialogSeen = true | .projects[$r].hasTrustDialogAccepted = true' \
+        > "$tmp" 2>/dev/null; then
+        mv "$tmp" "$cfg"
+        log_success "seeded Remote Control gates (trust: $root)"
+    else
+        rm -f "$tmp"
+        log_warn "could not seed Remote Control config (jq failed) — leaving ~/.claude.json untouched"
+    fi
+}
+
+# ==============================================================
 # Main
 # ==============================================================
 log "Starting claude_code agent bootstrap"
 install_apt_prereqs
 install_node
 write_env_file
-check_claude_cli
+ensure_claude_cli
 install_login_guard
+seed_remote_control_config
 log_success "claude_code agent bootstrap complete"
 exit 0

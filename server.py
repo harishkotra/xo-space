@@ -24,9 +24,21 @@ import httpx
 import uvicorn
 from config.models.claude_code import ClaudeCodeClient
 from config.models.codex import CodexCodeClient
+from utils.local_port import LocalPortsUnavailableError, resolve_server_port
 
 # Load environment variables
 load_dotenv()
+_quirq_state_root = Path(
+    (os.getenv("QUIRQ_STATE_ROOT", "") or "").strip() or Path.home() / ".quirq"
+).expanduser()
+_quirq_runtime_file = (
+    (os.getenv("QUIRQ_RUNTIME_FILE", "") or "").strip()
+    or str(_quirq_state_root / "runtime.env")
+)
+load_dotenv(_quirq_runtime_file, override=True)
+_quirq_secrets_file = (os.getenv("QUIRQ_SECRETS_FILE", "") or "").strip()
+if _quirq_secrets_file:
+    load_dotenv(_quirq_secrets_file, override=True)
 
 from routers.auth.auth import (
     XO_API_KEY,
@@ -128,8 +140,17 @@ STARTUP_WARMUP_ENABLED = os.getenv("STARTUP_WARMUP_ENABLED", "true").strip().low
     "yes",
     "on",
 }
+_STARTUP_WARMUP_URL_CONFIGURED = bool(
+    (os.getenv("STARTUP_WARMUP_URL", "") or "").strip()
+)
 STARTUP_WARMUP_URL = (
-    os.getenv("STARTUP_WARMUP_URL", "http://localhost:5002").strip().rstrip("/") + "/"
+    os.getenv(
+        "STARTUP_WARMUP_URL",
+        f"http://localhost:{os.getenv('PORT', '5002')}",
+    )
+    .strip()
+    .rstrip("/")
+    + "/"
 )
 STARTUP_WARMUP_DELAY_SECONDS = float(os.getenv("STARTUP_WARMUP_DELAY_SECONDS", "10"))
 
@@ -548,15 +569,22 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"⚠️ Usage sync failed to start (non-fatal): {e}")
 
-    # Visualizer watcher — materialises <project>/.xo/* from the
-    # runtime logs Claude Code writes under ~/.claude/projects/.
-    # Non-fatal: BFF endpoints keep serving whatever is on disk.
-    try:
-        from services.cowork_agent.visualizer.watcher import start_watcher
-        _watcher_task = asyncio.create_task(start_watcher())
-        print("   Watcher: background task started")
-    except Exception as e:
-        print(f"⚠️ Watcher failed to start (non-fatal): {e}")
+    # Visualizer watcher — materialises portable project metadata from the
+    # active runtime's native session store. Non-fatal: BFF endpoints keep
+    # serving whatever is already on disk.
+    _watcher_enabled = (
+        os.getenv("QUIRQ_WATCHER_ENABLED", "true").strip().lower()
+        in {"1", "true", "yes", "on"}
+    )
+    if _watcher_enabled:
+        try:
+            from services.cowork_agent.visualizer.watcher import start_watcher
+            _watcher_task = asyncio.create_task(start_watcher())
+            print("   Watcher: background task started")
+        except Exception as e:
+            print(f"⚠️ Watcher failed to start (non-fatal): {e}")
+    else:
+        print("   Watcher: disabled by runtime configuration")
 
     _warmup_task = asyncio.create_task(startup_warmup_request())
 
@@ -937,7 +965,26 @@ async def ask_question_streaming(data: AskQuestionRequest):
 
 if __name__ == "__main__":
     host = os.getenv("HOST", "0.0.0.0")
-    port = int(os.getenv("PORT", "5002"))
+    requested_port = int(os.getenv("PORT", "5002"))
+    try:
+        port = resolve_server_port(
+            host=host,
+            requested_port=requested_port,
+            stage=STAGE,
+        )
+    except LocalPortsUnavailableError as exc:
+        print(f"❌ {exc}")
+        raise SystemExit(1) from exc
+
+    if port != requested_port:
+        print(
+            f"⚠️ Local port {requested_port} is already in use; "
+            f"using http://{host}:{port} instead."
+        )
+        os.environ["PORT"] = str(port)
+        if not _STARTUP_WARMUP_URL_CONFIGURED:
+            STARTUP_WARMUP_URL = f"http://localhost:{port}/"
+
     reload = os.getenv("UVICORN_RELOAD", "").strip().lower() in ("1", "true", "yes")
 
     if reload:

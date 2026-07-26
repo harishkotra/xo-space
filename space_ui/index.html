@@ -5,13 +5,16 @@
 </head><body>
 <link rel="stylesheet" href="css/base.css">
 <link rel="stylesheet" href="css/stage.css">
-<link rel="stylesheet" href="css/graph.css">
-<link rel="stylesheet" href="css/sessions.css">
+<link rel="stylesheet" href="css/graph.css?v=20260726-environments1">
+<link rel="stylesheet" href="css/sessions.css?v=20260725-sessions2">
 <link rel="stylesheet" href="css/timeline.css">
 <link rel="stylesheet" href="css/sixdegrees.css">
-<link rel="stylesheet" href="css/chrome.css">
+<link rel="stylesheet" href="css/chrome.css?v=20260725-secrets">
 <link rel="stylesheet" href="css/projects.css">
 <link rel="stylesheet" href="css/chat.css">
+<link rel="stylesheet" href="css/wiki.css?v=20260725-collaboration1">
+<link rel="stylesheet" href="css/quirq.css?v=20260725-quirq2">
+<link rel="stylesheet" href="css/secrets.css?v=20260725-roots1">
 
 <div class="topbar">
   <div class="brand">
@@ -26,7 +29,7 @@
   <div class="tright">
     <div class="rootpick">
       <button id="root-btn" title="Re-root the graph on any node">
-        <span class="rlab">Root</span><b id="root-name">XO</b><span class="caret">&#9662;</span>
+        <span class="rlab">Graph root</span><b id="root-name">XO</b><span class="caret">&#9662;</span>
       </button>
       <div class="rootdd" id="rootdd">
         <div class="hint">Re-root the graph</div>
@@ -70,6 +73,10 @@
   <section class="view" id="view-time">
     <div class="thead">
       <div>
+        <div class="atlas-lens-switch" aria-label="Timeline tools">
+          <button class="is-on" type="button" data-atlas-lens="time">Timeline</button>
+          <button type="button" data-atlas-lens="six">Six degrees</button>
+        </div>
         <h2>Thirteen months, four departments.</h2>
         <div class="sub" id="tsub">Scrub through the workspace as it grew. Open any cluster from the graph to watch its run unfold here.</div>
       </div>
@@ -90,6 +97,10 @@
   <section class="view" id="view-six">
     <div class="sixwrap">
       <div class="sixhead">
+        <div class="atlas-lens-switch" aria-label="Timeline tools">
+          <button type="button" data-atlas-lens="time">Timeline</button>
+          <button class="is-on" type="button" data-atlas-lens="six">Six degrees</button>
+        </div>
         <h2>Six degrees of XO</h2>
         <div class="sub">Two artifacts. The shortest chain of work that connects them.</div>
       </div>
@@ -141,6 +152,6 @@
   <div class="meta" id="fmeta"></div>
 </footer>
 
-<script type="module" src="js/app.js"></script>
+<script type="module" src="js/app.js?v=20260726-environments1"></script>
 
 </body></html>
