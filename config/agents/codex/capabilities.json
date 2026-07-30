@@ -2,14 +2,14 @@
   "models": {
     "enabled": true,
     "oauth": {
-      "claude_code": { "enabled": true },
-      "codex": { "enabled": false }
+      "claude_code": { "enabled": false },
+      "codex": { "enabled": true }
     },
     "api_keys": {
       "enabled": true,
-      "anthropic": { "enabled": true },
-      "openai": { "enabled": false },
-      "openrouter": { "enabled": true }
+      "anthropic": { "enabled": false },
+      "openai": { "enabled": true },
+      "openrouter": { "enabled": false }
     }
   },
   "data": {
@@ -24,6 +24,5 @@
     "telegram": { "enabled": false },
     "slack": { "enabled": false }
   },
-  "secrets": { "enabled": true },
-  "remote_control": { "enabled": true }
+  "secrets": { "enabled": true }
 }
