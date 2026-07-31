@@ -3,7 +3,7 @@
 Pick a directory to keep Quirq in, then run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/quirq-ai/xo-space/development/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/quirq-ai/xo-space/main/install.sh | bash
 ```
 
 Open <http://localhost:5003/space/>.
@@ -102,7 +102,7 @@ Every value is overridable from the environment:
 | `XO_PROJECTS_ROOT` | `./xo-projects` |
 | `QUIRQ_STATE_ROOT` | `./.quirq` |
 | `QUIRQ_APP_DIR` | `./quirq` |
-| `QUIRQ_SOURCE_REF` | `development` |
+| `QUIRQ_SOURCE_REF` | `main` |
 | `AGENT_NAME` | `claude_code` |
 | `QUIRQ_SKIP_BOOT_INSTALL` | `1` |
 

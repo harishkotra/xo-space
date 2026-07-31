@@ -39,7 +39,9 @@
 set -Eeuo pipefail
 
 SOURCE_REPO="${QUIRQ_SOURCE_REPO:-https://github.com/quirq-ai/xo-space.git}"
-SOURCE_REF="${QUIRQ_SOURCE_REF:-development}"
+# main, not development: this is what the public one-liner clones, so it must
+# be the reviewed branch. Set QUIRQ_SOURCE_REF=development to track dev.
+SOURCE_REF="${QUIRQ_SOURCE_REF:-main}"
 # Captured before anything cd's. Everything Quirq creates hangs off this, so
 # a run is self-contained in the directory you launched it from.
 LAUNCH_DIR="$PWD"
