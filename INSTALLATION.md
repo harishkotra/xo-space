@@ -1,6 +1,6 @@
 # Install and run Quirq
 
-Start Docker, then run:
+Pick a directory to keep Quirq in, then run:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/quirq-ai/xo-space/development/install.sh | bash
@@ -8,56 +8,119 @@ curl -fsSL https://raw.githubusercontent.com/quirq-ai/xo-space/development/insta
 
 Open <http://localhost:5003/space/>.
 
-That is the complete installation. You do not need Git, Python, a repository
-clone, or a project checkout. The command:
+Docker is not required. The command:
 
-1. downloads the published Quirq container image;
-2. starts it in the background on `localhost:5003`;
-3. mounts persistent projects and machine state from your home directory;
-4. asks the image which agent-native state directories it supports and mounts
-   only those directories, rather than your entire home directory;
-5. waits until the API is healthy; and
-6. prints the URL.
+1. installs [uv](https://docs.astral.sh/uv/) if it is missing;
+2. clones Quirq into `./quirq`;
+3. creates `./quirq/venv` with Python 3.12, downloading an interpreter if the
+   host has none, and installs `requirements.txt`;
+4. creates `./xo-projects` and `./.quirq`;
+5. reports which optional tools are present; and
+6. starts the server in the foreground and prints the URL.
 
-Run the same command again to update Quirq.
+Press Ctrl-C to stop it. Run the same command again to update and restart.
+
+It must be piped to `bash`, not `sh` — the script uses `BASH_SOURCE` and
+`set -o pipefail`, neither of which exists in POSIX `sh`.
+
+## Prerequisites
+
+`git` is required: Quirq uses it to download itself, and at runtime for project
+sync and history.
+
+Everything else is optional. The script prints a readiness table at startup
+naming what each missing tool costs you:
+
+| Tool | Used for |
+|---|---|
+| `node`, `npm` | installing the agent CLI |
+| `gh` | xo-projects-sync backup repositories |
+| `rclone` | Google Drive and OneDrive connectors |
+| `gpg` | encrypted backup and restore |
+
+Nothing here is fatal. A missing tool disables its feature and nothing else.
+
+## The agent CLI
+
+Quirq does not install anything beyond `requirements.txt`. It runs on your own
+machine, so it will not `apt-get`, pipe an installer to your shell, or
+`npm install -g` behind your back.
+
+That means you install the agent CLI yourself, once:
+
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+To opt back into the automatic bootstrap — apt packages, Node via nvm, and the
+CLI — start with `QUIRQ_SKIP_BOOT_INSTALL=0`.
 
 ## Local data
 
-| Host path | Container path | Purpose |
-|---|---|---|
-| `~/xo-projects` | `/workspace/xo-projects` | XO projects and their `.xo` project metadata |
-| `~/.quirq` | `/root/.quirq` | Runtime configuration, saved credentials, watcher activity, cursors, locks, and other machine-local state |
-| Agent-native directories discovered from the image manifests | Their matching paths below `/root` | Existing native configuration and session records used by the Setup tab and watcher |
+Everything lives under the directory you launched from, so an install is
+self-contained and you can move or delete it as one folder.
 
-Open the **Setup** tab after installation. It shows the exact host and
-container paths, whether each runtime is mounted, CLI readiness, native session
-file counts, the active chat backend, watcher source mode and tick interval.
-It also lets you configure a different XO projects root and `.quirq` state
-root. Root changes are saved privately, then applied by running the same
-installer command again because Docker bind mounts cannot change in place.
-Changes that are read at startup are explicitly marked pending; the tab can
-restart an installer-managed container and reconnect automatically.
+| Path | Purpose |
+|---|---|
+| `./quirq` | The Quirq source checkout |
+| `./quirq/venv` | Python environment |
+| `./xo-projects` | XO projects and their `.xo` project metadata |
+| `./.quirq` | Runtime configuration, saved credentials, watcher activity, cursors, locks, and other machine-local state |
 
-For a custom projects directory, keep it to one command:
+Open the **Setup** tab after installation. It shows the paths in use, CLI
+readiness, native session file counts, the active chat backend, and the watcher
+source mode and tick interval. It also lets you configure a different XO
+projects root and `.quirq` state root.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/quirq-ai/xo-space/development/install.sh | XO_PROJECTS_ROOT=/absolute/path bash
-```
+The Setup tab cannot restart the server for you — nothing supervises the
+process. When it reports that a restart is required, press Ctrl-C and run the
+command again.
 
-To set both roots on first install:
+## Running from a clone
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/quirq-ai/xo-space/development/install.sh | XO_PROJECTS_ROOT=/absolute/projects QUIRQ_STATE_ROOT=/absolute/state bash
-```
-
-Updates automatically preserve the directories mounted by the previous Quirq
-container. When Setup points `.quirq` at an empty directory, the installer
-copies the existing machine state into it. It never copies or moves project
-files, merges a non-empty state directory, or puts watcher state inside a
-project.
-
-To stop Quirq:
+If you already have a checkout, run the script from inside it:
 
 ```bash
-docker stop quirq
+git clone https://github.com/quirq-ai/xo-space
+cd xo-space
+./install.sh
 ```
+
+It detects the checkout, uses that working tree in place, and never runs a git
+command against it — your local edits are left alone. In this mode
+`./xo-projects` and `./.quirq` are created inside the repository, so add them
+to `.gitignore` if you want a clean `git status`.
+
+## Configuration
+
+Every value is overridable from the environment:
+
+| Variable | Default |
+|---|---|
+| `PORT` | `5003` |
+| `HOST` | `127.0.0.1` |
+| `XO_PROJECTS_ROOT` | `./xo-projects` |
+| `QUIRQ_STATE_ROOT` | `./.quirq` |
+| `QUIRQ_APP_DIR` | `./quirq` |
+| `QUIRQ_SOURCE_REF` | `development` |
+| `AGENT_NAME` | `claude_code` |
+| `QUIRQ_SKIP_BOOT_INSTALL` | `1` |
+
+For example:
+
+```bash
+curl -fsSL <url>/install.sh | PORT=8080 XO_PROJECTS_ROOT=/absolute/path bash
+```
+
+Roots are also read from `roots.env` in the state root, which the Setup tab
+writes. Explicit environment variables take precedence over it.
+
+Quirq refuses to start if the projects root and state root are nested inside
+one another, or if the checkout sits inside the state root — relocating the
+state root copies it wholesale, and it must not drag a checkout or your
+projects along.
+
+## Windows
+
+Not supported. The server's boot hooks are bash scripts, and while they fail
+non-fatally, no equivalent installer exists. Use WSL.

@@ -378,6 +378,62 @@ async def startup_warmup_request() -> None:
 # FastAPI Application
 # =============================================================================
 
+def _session_telemetry_daemons(action: str) -> None:
+    """Start or stop every session-telemetry provider's ingestion daemon.
+
+    Core never names a telemetry backend. Providers are discovered through the
+    capability loader, and each may optionally expose ``start_daemon`` /
+    ``stop_daemon``; one that does not is skipped, exactly as with
+    ``runtime_mounts`` in scripts/list_runtime_mounts.py.
+
+    Deliberately not gated by QUIRQ_SKIP_BOOT_INSTALL: starting a process that
+    pip already installed is not installing software.
+
+    Non-fatal in both directions — a provider that fails to start must not
+    block the boot, and one that fails to stop must not hang the shutdown.
+    """
+
+    try:
+        from services.cowork_agent.adapters.loader import (
+            list_capability_providers,
+            try_load_capability,
+        )
+    except Exception as exc:
+        print(f"⚠️ session telemetry daemon {action} skipped (non-fatal): {exc}")
+        return
+
+    for provider in list_capability_providers("session_telemetry"):
+        module = try_load_capability("session_telemetry", agent=provider)
+        hook = getattr(module, f"{action}_daemon", None) if module else None
+        if not callable(hook):
+            continue
+        try:
+            hook()
+        except Exception as exc:
+            print(
+                f"⚠️ {provider} telemetry daemon {action} failed (non-fatal): {exc}"
+            )
+
+
+def _boot_installs_disabled() -> bool:
+    """Whether the boot-time system-dependency installers are switched off.
+
+    Set QUIRQ_SKIP_BOOT_INSTALL=1 for deployments that must not download or
+    install anything beyond requirements.txt — the Docker-free native runner
+    does, because it runs on a user's own machine rather than a disposable
+    container. Defaults to off, so container and Coder boots are unchanged.
+
+    Callers still work when this is on: both installers are already non-fatal,
+    and every dependency they provide degrades a feature rather than breaking
+    startup.
+    """
+    return (os.getenv("QUIRQ_SKIP_BOOT_INSTALL", "") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+
 def _run_agent_setup() -> None:
     """Run config/agents/<AGENT_NAME>/setup.sh once at boot.
 
@@ -388,6 +444,10 @@ def _run_agent_setup() -> None:
     Non-fatal: a failure here logs and returns so the API still comes
     up for debugging.
     """
+    if _boot_installs_disabled():
+        print("🔧 QUIRQ_SKIP_BOOT_INSTALL set — skipping agent bootstrap")
+        return
+
     agent = (os.getenv("AGENT_NAME", "") or "").strip()
     if not agent:
         print("🔧 AGENT_NAME unset — skipping agent bootstrap")
@@ -434,6 +494,10 @@ def _install_shared_deps() -> None:
     idempotent (skips deps already on PATH) and no-ops on non-apt hosts.
     Non-fatal: a failure logs and returns so the API still comes up.
     """
+    if _boot_installs_disabled():
+        print("🔧 QUIRQ_SKIP_BOOT_INSTALL set — skipping shared dep install")
+        return
+
     repo_root = os.path.dirname(os.path.abspath(__file__))
     script = os.path.join(repo_root, "scripts", "install_shared_deps.sh")
     if not os.path.isfile(script):
@@ -484,6 +548,11 @@ async def lifespan(app: FastAPI):
     # Install shared, agent-agnostic system deps (rclone, gh, gnupg) before the
     # connector + xo-projects-sync checks below rely on them being on PATH.
     _install_shared_deps()
+
+    # Session telemetry ingestion. Tied to this process's lifetime so the
+    # Sessions tab has fresh data whenever Quirq is up, and nothing is left
+    # running once it is down.
+    _session_telemetry_daemons("start")
 
     print("🚀 Starting XO Cowork API Server...")
     print(f"   Chat API: {CHAT_API_BASE_URL}")
@@ -589,6 +658,10 @@ async def lifespan(app: FastAPI):
     _warmup_task = asyncio.create_task(startup_warmup_request())
 
     yield
+
+    # Stop ingestion first: the daemon is an external process, so leaving it
+    # behind outlives this server, unlike the asyncio tasks cancelled below.
+    _session_telemetry_daemons("stop")
 
     # Cleanup background task
     if _warmup_task and not _warmup_task.done():

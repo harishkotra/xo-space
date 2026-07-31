@@ -1,32 +1,39 @@
 #!/usr/bin/env bash
 # ==============================================================
-# run-local.sh — set up and run Quirq natively, without Docker.
+# install.sh — set up and run Quirq natively, without Docker.
 #
-# The Docker-free counterpart to install.sh. Where install.sh pulls
-# an image and `docker run`s it, this script prepares a virtual
-# environment with uv and runs `server.py` directly in the
-# foreground, the way you would during normal local development.
+# Replaces the previous Docker installer. Instead of pulling an image
+# and `docker run`ing it, this prepares a virtual environment with uv
+# and runs `server.py` directly in the foreground, the way you would
+# during normal local development. Docker Desktop is no longer a
+# prerequisite; git and a network connection are.
 #
 # Two ways to use it, chosen automatically:
 #
 #   From a checkout — uses that working tree in place and never runs
 #   a git command against it, so your local edits stay yours:
 #       git clone https://github.com/quirq-ai/xo-space
-#       cd xo-space && ./run-local.sh
+#       cd xo-space && ./install.sh
 #
-#   Standalone — clones into ~/quirq and runs from there. Re-running
+#   Standalone — clones into ./quirq and runs from there. Re-running
 #   fast-forwards that checkout, so this doubles as the update path:
-#       curl -fsSL <raw-url>/run-local.sh | bash
+#       curl -fsSL <raw-url>/install.sh | bash
+#
+# Everything is created under the directory you launch from, so a run
+# is self-contained:  ./quirq (source), ./xo-projects, ./.quirq (state)
 #
 # Ctrl-C stops the server. Re-run to update and restart.
 #
-# Root directories follow the same precedence as install.sh:
+# Root directory precedence:
 #     XO_PROJECTS_ROOT / QUIRQ_STATE_ROOT env vars
 #         → roots.env saved by the Setup tab
-#         → ~/xo-projects and ~/.quirq
+#         → ./xo-projects and ./.quirq
 #
 # Every environment value below is overridable from the caller's
-# environment, e.g.  PORT=8080 ./run-local.sh
+# environment, e.g.  PORT=8080 ./install.sh
+#
+# Note it must be piped to `bash`, not `sh`: it uses BASH_SOURCE and
+# `set -o pipefail`, neither of which exists in POSIX sh (dash).
 # ==============================================================
 
 set -Eeuo pipefail
@@ -64,7 +71,7 @@ require_command() {
 #         it and never run a git command against it.
 #   No  → managed. The script was piped from curl or downloaded on
 #         its own, so we own a checkout at APP_DIR and keep it
-#         current, the way install.sh owns its container.
+#         current, the way the old installer owned its container.
 #
 # The probe is `-f` on BASH_SOURCE rather than a git check, because
 # a script read from stdin names no real file — which is exactly
@@ -301,8 +308,8 @@ PY
 #       it cannot restart this process instead of offering a
 #       control that would fail.
 #
-# AGENT_NAME defaults to claude_code here, where install.sh leaves it
-# unset. Without it the server still boots — agent_registry safe-boots
+# AGENT_NAME defaults to claude_code here, where the Docker installer
+# left it unset. Without it the server still boots — agent_registry safe-boots
 # to openclaw — but _run_agent_setup reads AGENT_NAME directly with no
 # fallback, so nothing would install a CLI and no backend would work.
 # Setting it makes the Docker-free path self-sufficient on first run.
@@ -319,6 +326,11 @@ start_server() {
     export PORT
     export STAGE="${STAGE:-local}"
     export AGENT_NAME="${AGENT_NAME:-claude_code}"
+    # This runs on someone's own machine, not a disposable container, so the
+    # boot hooks must not apt-install, curl-pipe nvm, or npm -g anything.
+    # requirements.txt inside venv/ is the whole footprint. Set it to 0 to opt
+    # back into the old container behaviour.
+    export QUIRQ_SKIP_BOOT_INSTALL="${QUIRQ_SKIP_BOOT_INSTALL:-1}"
     export UVICORN_RELOAD="${UVICORN_RELOAD:-false}"
     export STARTUP_WARMUP_URL="${STARTUP_WARMUP_URL:-http://127.0.0.1:${PORT}}"
     export XO_PROJECTS_ROOT="$projects_root"

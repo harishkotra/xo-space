@@ -128,29 +128,55 @@ class SpaceWikiTests(unittest.TestCase):
 
     def test_installation_guide_documents_one_command_setup(self) -> None:
         guide = (ROOT / "INSTALLATION.md").read_text(encoding="utf-8")
-        installer = (ROOT / "install.sh").read_text(encoding="utf-8")
-        workflow = (
-            ROOT / ".github" / "workflows" / "publish-container.yml"
-        ).read_text(encoding="utf-8")
 
         self.assertIn("curl -fsSL", guide)
-        self.assertIn("You do not need Git", guide)
         self.assertIn("localhost:5003", guide)
-        self.assertNotIn("git clone", guide)
-        self.assertIn("ghcr.io/sharmasuraj0123/xo-cowork-api:latest", installer)
-        self.assertIn("docker run", installer)
-        self.assertIn(".State.Health", installer)
-        self.assertIn("127.0.0.1:5003:5002", installer)
-        self.assertIn('io.quirq.managed', installer)
-        self.assertIn("mounted_host_path", installer)
-        self.assertIn("saved_root_from_file", installer)
-        self.assertIn("prepare_state_root", installer)
-        self.assertIn("scripts.list_runtime_mounts", installer)
-        self.assertIn('${host_path}:${container_path}:ro', installer)
-        self.assertIn("QUIRQ_WATCHER_SOURCE_MODE=all", installer)
-        self.assertIn("QUIRQ_ALLOW_SELF_RESTART=true", installer)
-        self.assertIn("AI_WORKSPACE_ROOT=/workspace/xo-projects", installer)
-        self.assertIn("platforms: linux/amd64,linux/arm64", workflow)
+        # Piping to `sh` fails: the installer uses BASH_SOURCE and pipefail.
+        self.assertIn("| bash", guide)
+        self.assertNotIn("| sh\n", guide)
+        # git went from "you do not need it" to a hard prerequisite.
+        self.assertNotIn("You do not need Git", guide)
+
+    def test_installer_runs_natively_without_docker(self) -> None:
+        """The installer's premise: no Docker, and no surprise installs.
+
+        Comment lines are stripped first so these assert what the script
+        *does*, not what its header *says* about the Docker it replaced.
+        """
+
+        lines = (ROOT / "install.sh").read_text(encoding="utf-8").splitlines()
+        code = "\n".join(
+            line for line in lines if not line.lstrip().startswith("#")
+        )
+
+        self.assertNotIn("docker", code.lower())
+        self.assertIn("uv venv", code)
+        self.assertIn("uv pip install", code)
+        # venv/, not uv's default .venv/ — CLAUDE.md, DEVELOPING.md and
+        # compose.local.yml all document venv/bin/python.
+        self.assertNotIn(".venv", code)
+        # Root resolution must stay identical to the retired Docker installer.
+        self.assertIn("saved_root_from_file", code)
+        self.assertIn("validate_separate_roots", code)
+        self.assertIn("prepare_state_root", code)
+        # Nothing may be installed beyond requirements.txt.
+        self.assertIn("QUIRQ_SKIP_BOOT_INSTALL", code)
+
+    def test_installer_claims_no_container_only_capabilities(self) -> None:
+        """Setting either would make the Setup tab offer a restart control
+        that cannot work: nothing supervises a foreground process."""
+
+        lines = (ROOT / "install.sh").read_text(encoding="utf-8").splitlines()
+        code = "\n".join(
+            line for line in lines if not line.lstrip().startswith("#")
+        )
+
+        self.assertNotIn("QUIRQ_MANAGED_CONTAINER", code)
+        self.assertNotIn("QUIRQ_ALLOW_SELF_RESTART", code)
+        # Host-path translation only existed to bridge a container boundary.
+        self.assertNotIn("QUIRQ_HOST_HOME", code)
+        self.assertNotIn("QUIRQ_HOST_PROJECTS_ROOT", code)
+        self.assertNotIn("QUIRQ_HOST_STATE_ROOT", code)
 
     def test_project_template_no_longer_scaffolds_activity_in_xo(self) -> None:
         legacy_activity = (
