@@ -318,6 +318,123 @@ PY
 #
 # AI_PROVIDER is left alone: server.py already defaults it to claude.
 # ==============================================================
+# ==============================================================
+# .env — the checkout's own configuration file.
+#
+# Read before anything is resolved so your edits actually drive the run,
+# then written once on first install so there is something to edit.
+#
+# Precedence, highest first:
+#     1. variables exported in your shell   (PORT=8080 ./install.sh)
+#     2. this .env
+#     3. the defaults below
+#
+# which matches how the server itself loads it: python-dotenv's plain
+# load_dotenv() fills only what the environment left unset. The Setup tab's
+# runtime.env and secrets.env are loaded with override=True and beat all
+# three, so the tab stays authoritative for anything it manages.
+# ==============================================================
+
+# Keys install.sh exports. Only these can shadow the file, so only these have
+# to be read back out of it; anything else in .env reaches the server
+# untouched through load_dotenv().
+ENV_KEYS="HOST PORT STAGE AGENT_NAME UVICORN_RELOAD QUIRQ_SKIP_BOOT_INSTALL
+XO_PROJECTS_ROOT AI_WORKSPACE_ROOT QUIRQ_STATE_ROOT QUIRQ_WATCHER_SOURCE_MODE
+QUIRQ_PUBLIC_URL QUIRQ_RUNTIME_FILE QUIRQ_SECRETS_FILE STARTUP_WARMUP_URL"
+
+read_env_value() {
+    local key="$1"
+    local file="${REPO_DIR}/.env"
+    local line
+    local found=""
+
+    [ -f "$file" ] || return 0
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            "${key}="*)
+                found="${line#*=}"
+                found="${found%%[[:space:]]#*}"                  # trailing comment
+                found="${found#"${found%%[![:space:]]*}"}"       # trim left
+                found="${found%"${found##*[![:space:]]}"}"       # trim right
+                case "$found" in
+                    \"*\") found="${found#\"}"; found="${found%\"}" ;;
+                    \'*\') found="${found#\'}"; found="${found%\'}" ;;
+                esac
+                ;;
+        esac
+    done < "$file"
+    printf '%s' "$found"
+}
+
+load_env_file() {
+    local key
+    local value
+
+    for key in $ENV_KEYS; do
+        # Already set in the caller's environment — leave it alone, so an
+        # explicit `PORT=8080 ./install.sh` still wins over the file.
+        [ -z "${!key:-}" ] || continue
+        value="$(read_env_value "$key")"
+        [ -n "$value" ] || continue
+        export "${key}=${value}"
+    done
+}
+
+# Written once, then never touched again: it is the user's file after that,
+# and an installer that rewrites it every run would discard hand-edited
+# credentials on the next update.
+#
+# Credentials are written commented out rather than empty on purpose. An
+# empty assignment is not the same as absent — `CHAT_API_BASE_URL=` would
+# make os.getenv return "" instead of falling back to server.py's default,
+# silently pointing the server at nothing.
+write_env_file() {
+    local env_file="${REPO_DIR}/.env"
+
+    [ ! -f "$env_file" ] || return 0
+
+    umask 077
+    cat > "$env_file" <<ENVEOF
+# Quirq configuration, created by install.sh on first run.
+#
+# Edit, then re-run ./install.sh to apply. Variables exported in your shell
+# still win over this file, and the Setup tab's runtime.env / secrets.env
+# override both.
+#
+# Gitignored, and never rewritten once it exists.
+
+# --- Server ---
+HOST=${HOST}
+PORT=${PORT}
+STAGE=${STAGE}
+UVICORN_RELOAD=${UVICORN_RELOAD}
+
+# --- Agent backend ---
+AGENT_NAME=${AGENT_NAME}
+
+# Install nothing beyond requirements.txt. Set to 0 to let the boot hooks
+# apt-install, fetch Node via nvm, and npm -g the agent CLI.
+QUIRQ_SKIP_BOOT_INSTALL=${QUIRQ_SKIP_BOOT_INSTALL}
+
+# --- Paths ---
+XO_PROJECTS_ROOT=${XO_PROJECTS_ROOT}
+AI_WORKSPACE_ROOT=${AI_WORKSPACE_ROOT}
+QUIRQ_STATE_ROOT=${QUIRQ_STATE_ROOT}
+QUIRQ_WATCHER_SOURCE_MODE=${QUIRQ_WATCHER_SOURCE_MODE}
+
+# --- Credentials ---
+# Uncomment and fill in, or configure them through the Setup tab instead.
+# Leave them commented rather than blank: an empty value overrides the
+# server's own default with an empty string.
+# ANTHROPIC_API_KEY=
+# CLAUDE_CODE_OAUTH_TOKEN=
+# XO_API_KEY=
+# CHAT_API_BASE_URL=https://api-swarm-beta.xo.builders
+ENVEOF
+    chmod 600 "$env_file"
+    printf 'Wrote %s (mode 600) — edit it to change this install.\n' "$env_file"
+}
+
 start_server() {
     local projects_root="$1"
     local state_root="$2"
@@ -340,6 +457,10 @@ start_server() {
     export QUIRQ_SECRETS_FILE="${QUIRQ_SECRETS_FILE:-${state_root}/secrets.env}"
     export QUIRQ_WATCHER_SOURCE_MODE="${QUIRQ_WATCHER_SOURCE_MODE:-all}"
     export QUIRQ_PUBLIC_URL="${QUIRQ_PUBLIC_URL:-http://localhost:${PORT}}"
+
+    # Written here, after every value is resolved, so the file records the
+    # configuration this install actually ran with.
+    write_env_file
 
     printf '\nStarting Quirq: http://localhost:%s/space/\n' "$PORT"
     printf 'Press Ctrl-C to stop.\n\n'
@@ -372,6 +493,10 @@ main() {
     cd "$REPO_DIR"
     VENV_DIR="${REPO_DIR}/venv"
     VENV_PYTHON="${VENV_DIR}/bin/python"
+
+    # Before any default is applied, so .env drives the resolution below
+    # rather than being shadowed by it.
+    load_env_file
 
     HOST="${HOST:-127.0.0.1}"
     PORT="${PORT:-5002}"

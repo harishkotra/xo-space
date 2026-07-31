@@ -112,6 +112,20 @@ For example:
 curl -fsSL <url>/install.sh | PORT=8080 XO_PROJECTS_ROOT=/absolute/path bash
 ```
 
+On first run the installer writes `quirq/.env` recording exactly what it used,
+then never rewrites it — it is yours to edit. Change a value there and re-run
+`./install.sh` to apply it. Credentials are written commented out; uncomment
+the ones you need, or configure them through the Setup tab instead.
+
+Precedence, highest first:
+
+1. variables exported in your shell — `PORT=8080 ./install.sh`
+2. `quirq/.env`
+3. the defaults above
+
+The Setup tab's `runtime.env` and `secrets.env` are loaded with `override=True`
+and beat all three, so the tab stays authoritative for whatever it manages.
+
 Roots are also read from `roots.env` in the state root, which the Setup tab
 writes. Explicit environment variables take precedence over it.
 
