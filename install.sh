@@ -15,19 +15,20 @@
 #       git clone https://github.com/quirq-ai/xo-space
 #       cd xo-space && ./install.sh
 #
-#   Standalone — clones into ./quirq and runs from there. Re-running
-#   fast-forwards that checkout, so this doubles as the update path:
+#   Standalone — clones into ./<repo-name> and runs from there.
+#   Re-running fast-forwards that checkout, so this doubles as the
+#   update path:
 #       curl -fsSL <raw-url>/install.sh | bash
 #
-# Everything is created under the directory you launch from, so a run
-# is self-contained:  ./quirq (source), ./xo-projects, ./.quirq (state)
+# The directory you launch from becomes the workspace: the checkout
+# lands beside your projects, and machine state goes in ./.quirq
 #
 # Ctrl-C stops the server. Re-run to update and restart.
 #
 # Root directory precedence:
 #     XO_PROJECTS_ROOT / QUIRQ_STATE_ROOT env vars
 #         → roots.env saved by the Setup tab
-#         → ./xo-projects and ./.quirq
+#         → the launch directory, and ./.quirq inside it
 #
 # Every environment value below is overridable from the caller's
 # environment, e.g.  PORT=8080 ./install.sh
@@ -45,7 +46,11 @@ SOURCE_REF="${QUIRQ_SOURCE_REF:-main}"
 # Captured before anything cd's. Everything Quirq creates hangs off this, so
 # a run is self-contained in the directory you launched it from.
 LAUNCH_DIR="$PWD"
-APP_DIR="${QUIRQ_APP_DIR:-${LAUNCH_DIR}/quirq}"
+# Named after the repository, the way a plain `git clone` would name it, so
+# the directory follows QUIRQ_SOURCE_REPO instead of hardcoding one name.
+REPO_NAME="${SOURCE_REPO##*/}"
+REPO_NAME="${REPO_NAME%.git}"
+APP_DIR="${QUIRQ_APP_DIR:-${LAUNCH_DIR}/${REPO_NAME}}"
 PYTHON_VERSION="${QUIRQ_PYTHON_VERSION:-3.12}"
 UV_INSTALL_URL="https://astral.sh/uv/install.sh"
 
@@ -105,11 +110,12 @@ resolve_repo_dir() {
 # than one that is a version behind.
 fetch_repo() {
     if [ -d "${REPO_DIR}/.git" ]; then
+        printf 'Quirq is already installed here: %s\n' "$REPO_DIR"
         if [ -n "$(git -C "$REPO_DIR" status --porcelain)" ]; then
-            printf 'Local changes in %s — keeping them, skipping the update.\n' "$REPO_DIR"
+            printf 'It has local changes — keeping them, skipping the update.\n'
             return
         fi
-        printf 'Updating Quirq in %s...\n' "$REPO_DIR"
+        printf 'Updating it to the latest %s...\n' "$SOURCE_REF"
         git -C "$REPO_DIR" fetch --quiet --depth 1 origin "$SOURCE_REF" ||
             fail "Could not fetch ${SOURCE_REF} from ${SOURCE_REPO}."
         git -C "$REPO_DIR" reset --hard --quiet FETCH_HEAD ||
@@ -239,9 +245,23 @@ validate_host_root() {
 validate_separate_roots() {
     local projects_root="$1"
     local state_root="$2"
+    local relative
 
     case "${state_root}/" in
-        "${projects_root}/"*) fail "Quirq root cannot be inside XO root." ;;
+        "${projects_root}/"*)
+            # One nesting is allowed: the state root as a hidden directory
+            # directly inside the projects root, which is the default layout
+            # (./ and ./.quirq). quirq_catalog skips dot-prefixed entries when
+            # it enumerates projects, so ".quirq" there can never be mistaken
+            # for one. Anything deeper, or not hidden, would be — and equal
+            # roots fall through to the failure too.
+            relative="${state_root#"${projects_root}/"}"
+            case "$relative" in
+                */*) fail "Quirq root cannot be nested inside XO root." ;;
+                .?*) ;;
+                *) fail "Quirq root cannot be inside XO root." ;;
+            esac
+            ;;
     esac
     case "${projects_root}/" in
         "${state_root}/"*) fail "XO root cannot be inside Quirq root." ;;
@@ -291,7 +311,7 @@ PY
 
     case "$status" in
         0) return 0 ;;
-        1) fail "Port ${port} is already in use. Stop what is using it, or set PORT=<port> and run this script again." ;;
+        1) fail "Port ${port} is already in use — Quirq may already be running here. Stop it with Ctrl-C in the terminal running it, or set PORT=<port> to start a second one." ;;
         *) printf 'Could not verify that port %s is free; starting anyway.\n' "$port" ;;
     esac
 }
@@ -506,7 +526,7 @@ main() {
     anchor_dir="${QUIRQ_STATE_ROOT:-${LAUNCH_DIR}/.quirq}"
     saved_projects_root="$(saved_root_from_file "$anchor_dir" "XO_PROJECTS_ROOT")"
     saved_state_root="$(saved_root_from_file "$anchor_dir" "QUIRQ_STATE_ROOT")"
-    projects_root="${XO_PROJECTS_ROOT:-${saved_projects_root:-${LAUNCH_DIR}/xo-projects}}"
+    projects_root="${XO_PROJECTS_ROOT:-${saved_projects_root:-${LAUNCH_DIR}}}"
     state_root="${QUIRQ_STATE_ROOT:-${saved_state_root:-${LAUNCH_DIR}/.quirq}}"
     validate_host_root "XO root" "$projects_root"
     validate_host_root "Quirq root" "$state_root"
