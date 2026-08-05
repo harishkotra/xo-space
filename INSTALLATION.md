@@ -11,10 +11,10 @@ Open <http://localhost:5003/space/>.
 Docker is not required. The command:
 
 1. installs [uv](https://docs.astral.sh/uv/) if it is missing;
-2. clones Quirq into `./quirq`;
-3. creates `./quirq/venv` with Python 3.12, downloading an interpreter if the
-   host has none, and installs `requirements.txt`;
-4. creates `./xo-projects` and `./.quirq`;
+2. clones Quirq into `./xo-space`, named after the repository;
+3. creates `./xo-space/venv` with Python 3.12, downloading an interpreter if
+   the host has none, and installs `requirements.txt`;
+4. creates `./.quirq`, and treats the current directory as your projects root;
 5. reports which optional tools are present; and
 6. starts the server in the foreground and prints the URL.
 
@@ -62,9 +62,9 @@ self-contained and you can move or delete it as one folder.
 
 | Path | Purpose |
 |---|---|
-| `./quirq` | The Quirq source checkout |
-| `./quirq/venv` | Python environment |
-| `./xo-projects` | XO projects and their `.xo` project metadata |
+| `.` | Your projects root — each project is a subdirectory with its own `.xo` |
+| `./xo-space` | The Quirq source checkout |
+| `./xo-space/venv` | Python environment |
 | `./.quirq` | Runtime configuration, saved credentials, watcher activity, cursors, locks, and other machine-local state |
 
 Open the **Setup** tab after installation. It shows the paths in use, CLI
@@ -88,8 +88,8 @@ cd xo-space
 
 It detects the checkout, uses that working tree in place, and never runs a git
 command against it — your local edits are left alone. In this mode
-`./xo-projects` and `./.quirq` are created inside the repository, so add them
-to `.gitignore` if you want a clean `git status`.
+the repository itself becomes the projects root and `./.quirq` is created
+inside it. Both are already in `.gitignore`.
 
 ## Configuration
 
@@ -99,9 +99,9 @@ Every value is overridable from the environment:
 |---|---|
 | `PORT` | `5003` |
 | `HOST` | `127.0.0.1` |
-| `XO_PROJECTS_ROOT` | `./xo-projects` |
+| `XO_PROJECTS_ROOT` | the launch directory |
 | `QUIRQ_STATE_ROOT` | `./.quirq` |
-| `QUIRQ_APP_DIR` | `./quirq` |
+| `QUIRQ_APP_DIR` | `./xo-space` |
 | `QUIRQ_SOURCE_REF` | `main` |
 | `AGENT_NAME` | `claude_code` |
 | `QUIRQ_SKIP_BOOT_INSTALL` | `1` |
@@ -133,6 +133,12 @@ Quirq refuses to start if the projects root and state root are nested inside
 one another, or if the checkout sits inside the state root — relocating the
 state root copies it wholesale, and it must not drag a checkout or your
 projects along.
+
+The one exception is the default layout: the state root may be a *hidden*
+directory directly inside the projects root, as `./.quirq` is. Project
+enumeration skips dot-prefixed entries, so it can never be mistaken for a
+project. A visible `./quirq` state root, or one nested deeper, is still
+rejected.
 
 ## Windows
 
