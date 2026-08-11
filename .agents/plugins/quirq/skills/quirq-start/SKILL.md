@@ -23,14 +23,20 @@ re-runs the installer.
    conversation, confirm: "Start Quirq from `<repo_dir>`?" Proceed only on
    an explicit yes.
 
-4. Start it **in the background**:
+4. Start it **detached**, mirroring the installer's own daemon behavior,
+   so the server survives this session ending. Use `state_root` from the
+   discovery output (fall back to `<repo_dir>/.quirq`, creating it first):
 
    ```bash
-   cd <repo_dir> && ./venv/bin/python server.py
+   cd <repo_dir> && mkdir -p "<state_root>" && \
+     nohup ./venv/bin/python server.py >> "<state_root>/quirq.log" 2>&1 < /dev/null &
+   echo $! > "<state_root>/quirq.pid"
    ```
 
 5. Poll `/health` on 5002 then 5003 (the server falls back automatically)
    for up to ~60 s.
 
-6. On success report port and `<base_url>/space/`. On failure show the
-   server's output verbatim and stop — no retries, no cleanup attempts.
+6. On success report port, `<base_url>/space/`, and the log/PID paths
+   (`<state_root>/quirq.log`, `<state_root>/quirq.pid`). On failure show
+   the tail of the log verbatim and stop — no retries, no cleanup
+   attempts.

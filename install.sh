@@ -23,7 +23,11 @@
 # The directory you launch from becomes the workspace: the checkout
 # lands beside your projects, and machine state goes in ./.quirq
 #
-# Ctrl-C stops the server. Re-run to update and restart.
+# The server starts in the background: the command returns once /health
+# answers, logs append to <state root>/quirq.log, and the PID is written
+# to <state root>/quirq.pid (stop with `kill "$(cat .quirq/quirq.pid)"`).
+# QUIRQ_FOREGROUND=1 keeps it in the foreground instead (Ctrl-C stops it).
+# Re-run to update and restart.
 #
 # Root directory precedence:
 #     XO_PROJECTS_ROOT / QUIRQ_STATE_ROOT env vars
@@ -311,7 +315,7 @@ PY
 
     case "$status" in
         0) return 0 ;;
-        1) fail "Port ${port} is already in use — Quirq may already be running here. Stop it with Ctrl-C in the terminal running it, or set PORT=<port> to start a second one." ;;
+        1) fail "Port ${port} is already in use — Quirq may already be running here. Stop it with kill \"\$(cat <state root>/quirq.pid)\" (or Ctrl-C if it is running in a terminal), or set PORT=<port> to start a second one." ;;
         *) printf 'Could not verify that port %s is free; starting anyway.\n' "$port" ;;
     esac
 }
@@ -484,12 +488,50 @@ start_server() {
     # configuration this install actually ran with.
     write_env_file
 
-    printf '\nStarting Quirq: http://localhost:%s/space/\n' "$PORT"
-    printf 'Press Ctrl-C to stop.\n\n'
+    # Foreground mode, for development: the server owns the terminal and
+    # Ctrl-C stops it. exec replaces this shell so no wrapper lingers.
+    if [ "${QUIRQ_FOREGROUND:-0}" = "1" ]; then
+        printf '\nStarting Quirq: http://localhost:%s/space/\n' "$PORT"
+        printf 'Press Ctrl-C to stop.\n\n'
+        exec "$VENV_PYTHON" server.py
+    fi
 
-    # exec replaces this shell with the server so Ctrl-C reaches
-    # Uvicorn directly and no wrapper process lingers.
-    exec "$VENV_PYTHON" server.py
+    # Default: run detached, hand the terminal back. The server survives the
+    # terminal closing (nohup, stdin from /dev/null), logs append to the
+    # state root beside the rest of the machine-local files, and the PID is
+    # recorded for a clean stop. QUIRQ_FOREGROUND=1 restores the old mode.
+    local log_file="${state_root}/quirq.log"
+    local pid_file="${state_root}/quirq.pid"
+    local server_pid
+    local waited=0
+
+    printf '\nStarting Quirq in the background...\n'
+    nohup "$VENV_PYTHON" server.py >> "$log_file" 2>&1 < /dev/null &
+    server_pid=$!
+    printf '%s\n' "$server_pid" > "$pid_file"
+
+    # Wait for /health rather than declaring victory at spawn: the first
+    # boot runs agent setup and can take a while, and a server that dies
+    # during it should be reported here, not discovered later.
+    while [ "$waited" -lt 90 ]; do
+        if curl -fsS -m 2 "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
+            printf '\nQuirq is running: http://localhost:%s/space/\n' "$PORT"
+            printf 'Logs:  %s\n' "$log_file"
+            printf 'Stop:  kill "$(cat %s)"\n' "$pid_file"
+            return 0
+        fi
+        if ! kill -0 "$server_pid" 2>/dev/null; then
+            rm -f "$pid_file"
+            printf '\nQuirq failed to start. Last log lines from %s:\n' "$log_file" >&2
+            tail -n 20 "$log_file" >&2 2>/dev/null
+            exit 1
+        fi
+        sleep 1
+        waited=$((waited + 1))
+    done
+
+    printf '\nQuirq is still starting (pid %s). Watch it with:\n' "$server_pid"
+    printf '    tail -f %s\n' "$log_file"
 }
 
 main() {

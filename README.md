@@ -80,22 +80,21 @@ Every coding agent ships with its own session store, its own auth, its own todo 
 curl -fsSL https://raw.githubusercontent.com/quirq-ai/xo-space/development/install.sh | bash
 ```
 
-Open <http://localhost:5003/space/>. The command starts Docker in the
-background, waits until the API is healthy, prints the URL, and returns control
-to your terminal. No clone, Python environment, or local checkout is required.
-Project data and machine-local Quirq state remain on the host through separate
-bind mounts. Agent-native data directories declared by the installed manifests
-are mounted too, so the Setup tab can inspect existing Claude Code, OpenClaw,
-Hermes, and other supported session stores without mounting the rest of the
-home directory.
+Run it from the directory you want as your workspace: the checkout lands
+beside your projects, machine-local state goes to `./.quirq`, and the server
+starts **in the background** — the command waits until the API is healthy,
+prints the URL, the log file (`./.quirq/quirq.log`), and the stop command,
+then returns control to your terminal. The server keeps running after the
+terminal closes. Set `QUIRQ_FOREGROUND=1` to keep it in the foreground
+instead (Ctrl-C stops it). Re-run the same command to update and restart.
 
-See the short [Docker installation guide](INSTALLATION.md) for the storage
-mounts and stop command.
+See the [Docker installation guide](INSTALLATION.md) for the container
+alternative.
 
 Verify it's up:
 
 ```bash
-curl http://localhost:5003/health
+curl http://localhost:5002/health
 ```
 
 ```jsonc
@@ -110,11 +109,13 @@ curl http://localhost:5003/health
 
 ### Process management
 
-Stop the installed container with:
+Stop the background server with:
 
 ```bash
-docker stop quirq
+kill "$(cat .quirq/quirq.pid)"   # from the directory you installed in
 ```
+
+(For the Docker install, `docker stop quirq`.)
 
 Backend contributors can still use the native process manager:
 

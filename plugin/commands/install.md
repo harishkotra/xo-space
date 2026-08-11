@@ -27,20 +27,19 @@ Install Quirq (xo-space) on this machine. The workspace directory is
    the server (the directory becomes your workspace root)." Proceed only on
    an explicit yes.
 
-4. Run the official installer **as a background task** (it ends by starting
-   the server in the foreground, so it will not return):
+4. Run the official installer with a generous timeout (~10 minutes — the
+   first install builds a Python env). It starts the server **in the
+   background** and returns on its own once `/health` answers:
 
    ```bash
    cd <dir> && curl -fsSL https://www.quirq.ai/install | sh
    ```
 
-5. Poll `http://127.0.0.1:5002/health` (then 5003) every ~5 s, up to
-   ~5 minutes — first install builds a venv and can be slow.
+5. Relay the installer's closing output faithfully. On success it prints
+   the UI URL, the log file (`<dir>/.quirq/quirq.log`), and the stop
+   command (`kill "$(cat <dir>/.quirq/quirq.pid)"`). Report those, note
+   the config file at `<dir>/xo-space/.env`, and that the server keeps
+   running after this session ends.
 
-6. On success: report the UI at `http://127.0.0.1:<port>/space/`, note the
-   config file at `<dir>/xo-space/.env`, and that the server stops when
-   this background task is killed — re-running `./xo-space/install.sh` in
-   `<dir>` (or `/quirq:start`) brings it back.
-
-7. On timeout or failure: show the tail of the installer output verbatim
-   and stop. Do not retry on your own.
+6. On failure the installer prints the last log lines itself — show them
+   verbatim and stop. Do not retry on your own.
