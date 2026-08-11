@@ -82,11 +82,11 @@ curl -fsSL https://raw.githubusercontent.com/quirq-ai/xo-space/development/insta
 
 Run it from the directory you want as your workspace: the checkout lands
 beside your projects, machine-local state goes to `./.quirq`, and the server
-starts **in the background** — the command waits until the API is healthy,
-prints the URL, the log file (`./.quirq/quirq.log`), and the stop command,
-then returns control to your terminal. The server keeps running after the
-terminal closes. Set `QUIRQ_FOREGROUND=1` to keep it in the foreground
-instead (Ctrl-C stops it). Re-run the same command to update and restart.
+runs **in your terminal** with a quiet screen — its output appends to
+`./.quirq/quirq.log`, Ctrl-C stops it, and re-running the same command
+updates and restarts it. Closing the terminal takes the server down with
+it; for an always-on server, run the same command under `tmux` or a
+supervisor of your choice.
 
 See the [Docker installation guide](INSTALLATION.md) for the container
 alternative.
@@ -109,10 +109,11 @@ curl http://localhost:5002/health
 
 ### Process management
 
-Stop the background server with:
+Ctrl-C stops the server; watch it with `tail -f .quirq/quirq.log`. If a
+stray server is holding the port and you can't find its terminal:
 
 ```bash
-kill "$(cat .quirq/quirq.pid)"   # from the directory you installed in
+lsof -i :5002   # find the PID, then kill it
 ```
 
 (For the Docker install, `docker stop quirq`.)
