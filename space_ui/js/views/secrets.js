@@ -142,6 +142,18 @@ function renderShell(){
           +'</div>'
         +'</div>'
       +'</section>'
+      +'<section class="setup-card setup-version">'
+        +'<div class="setup-card-head"><div><span>04 · Version</span><h2>xo-space updates</h2></div><i id="update-badge">Not checked</i></div>'
+        +'<div class="setup-version-body">'
+          +'<div class="setup-version-state" id="update-state">'
+            +'<div class="setup-empty">Check the git remote for a newer xo-space.</div>'
+          +'</div>'
+          +'<div class="setup-actions">'
+            +'<button class="setup-secondary" id="update-check" type="button">Check for updates</button>'
+            +'<button class="setup-primary" id="update-apply" type="button" hidden>Update now</button>'
+          +'</div>'
+        +'</div>'
+      +'</section>'
       +'<section class="setup-boundary">'
         +'<div><span>Portable project data</span><b>&lt;project&gt;/.xo/</b><p>Session indexes, todos, timelines, stats, memory, and project identity. The watcher owns writes.</p></div>'
         +'<em>stays separate from</em>'
@@ -170,6 +182,86 @@ function bindEvents(){
   root.querySelector('#secret-toggle').addEventListener('click',toggleSecretValue);
   root.querySelector('#setup-sources').addEventListener('click',handleRecommendedSecret);
   root.querySelector('#secret-list').addEventListener('click',handleSecretListAction);
+  root.querySelector('#update-check').addEventListener('click',checkForUpdate);
+  root.querySelector('#update-apply').addEventListener('click',applyUpdate);
+}
+
+/* ── Self-update (04 · Version) ────────────────────────────────────────────
+   Git-backed: GET /space/update/status fetches the checkout's remote and
+   reports how far HEAD is behind; POST /space/update/apply fast-forwards.
+   The server keeps running the old code until restarted. */
+let updateStatus=null;
+
+function renderUpdateState(html,badge){
+  root.querySelector('#update-state').innerHTML=html;
+  if(badge)root.querySelector('#update-badge').textContent=badge;
+}
+
+function commitLine(info){
+  if(!info)return'unknown';
+  return`<code>${esc(info.sha)}</code> · ${esc(info.date)} · ${esc(info.subject)}`;
+}
+
+async function checkForUpdate(){
+  const button=root.querySelector('#update-check');
+  button.disabled=true;
+  renderUpdateState('<div class="setup-empty">Asking the git remote…</div>','Checking');
+  const res=await apiFetch('/space/update/status');
+  button.disabled=false;
+  if(!res.ok){
+    renderUpdateState(`<div class="setup-empty">${esc(res.error||'The version check failed.')}</div>`,'Error');
+    return;
+  }
+  updateStatus=res.data;
+  const s=updateStatus;
+  const applyButton=root.querySelector('#update-apply');
+  applyButton.hidden=true;
+  if(!s.supported){
+    renderUpdateState(`<p>${esc(s.message)}</p>`,'Unavailable');
+    return;
+  }
+  const rows=[`<p><b>Installed</b> ${commitLine(s.current)} <span class="setup-version-branch">on ${esc(s.branch)}</span></p>`];
+  if(!s.fetch_ok){
+    rows.push(`<p>${esc(s.message)}</p>`);
+    renderUpdateState(rows.join(''),'Offline');
+    return;
+  }
+  if(s.up_to_date){
+    rows.push('<p>This is the latest version on the remote.</p>');
+    renderUpdateState(rows.join(''),'Up to date');
+  }else{
+    rows.push(`<p><b>Latest</b> ${commitLine(s.latest)}</p>`);
+    rows.push(`<p>${s.behind} commit${s.behind===1?'':'s'} behind${s.ahead?` · ${s.ahead} local commit${s.ahead===1?'':'s'} not on the remote`:''}${s.dirty?' · local changes present':''}.</p>`);
+    if(s.dirty)rows.push('<p>Updating needs a clean checkout: commit, stash, or discard the local changes first.</p>');
+    else if(s.ahead)rows.push('<p>The branches diverged; self-update only fast-forwards. Reconcile manually.</p>');
+    else applyButton.hidden=false;
+    renderUpdateState(rows.join(''),`${s.behind} behind`);
+  }
+}
+
+async function applyUpdate(){
+  const applyButton=root.querySelector('#update-apply');
+  applyButton.disabled=true;
+  renderUpdateState('<div class="setup-empty">Fast-forwarding the checkout…</div>','Updating');
+  const res=await apiFetch('/space/update/apply',{method:'POST'});
+  applyButton.disabled=false;
+  applyButton.hidden=true;
+  if(!res.ok){
+    renderUpdateState(`<div class="setup-empty">${esc(res.error||'The update failed.')}</div>`,'Error');
+    return;
+  }
+  const r=res.data;
+  if(!r.updated){
+    renderUpdateState(`<p>${esc(r.message)}</p>`,r.reason==='up_to_date'?'Up to date':'Blocked');
+    return;
+  }
+  toast(`Updated to ${r.to?.sha||'latest'}`);
+  renderUpdateState(
+    `<p><b>Updated</b> ${commitLine(r.to)} (${r.commits} commit${r.commits===1?'':'s'}).</p>`
+    +`<p>${esc(r.message)}</p>`
+    +(r.requirements_changed?'':'<p>Use Apply &amp; restart above (managed installs), or Ctrl-C and re-run the server, to start the new version.</p>'),
+    'Restart needed'
+  );
 }
 
 async function loadAll(){

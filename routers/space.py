@@ -64,6 +64,51 @@ async def space_server_stop(request: Request):
     return {"status": "stopping", "restart": "./cowork-api.sh start"}
 
 
+@router.get("/update/status")
+async def space_update_status():
+    """Version check for the Setup tab: how far HEAD is behind the remote.
+
+    Fetches the checkout's own remote via git; offline it still reports the
+    local version with fetch_ok false."""
+    from services.cowork_agent.self_update import check_update_status
+
+    try:
+        return await asyncio.to_thread(check_update_status)
+    except Exception as exc:
+        print(f"⚠️ update status failed ({exc})")
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "update_status_failed",
+                    "message": "Could not determine the checkout's version state."},
+        )
+
+
+@router.post("/update/apply")
+async def space_update_apply(request: Request):
+    """Fast-forward the checkout to the remote branch. Localhost only, like
+    /server/stop: it changes the code on disk. The running server keeps the
+    old version until restarted."""
+    if not _is_local(request):
+        raise HTTPException(status_code=403,
+                            detail="update is allowed from localhost only")
+    from services.cowork_agent.self_update import UpdateError, apply_update
+
+    try:
+        return await asyncio.to_thread(apply_update)
+    except UpdateError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "update_failed", "message": str(exc)},
+        )
+    except Exception as exc:
+        print(f"⚠️ update apply failed ({exc})")
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "update_failed",
+                    "message": "The update could not be applied."},
+        )
+
+
 SPACE_CACHE_TTL = float(os.getenv("SPACE_CACHE_TTL", "30"))
 
 # (built_at_monotonic, payload) — module-level; refreshed when older than TTL.

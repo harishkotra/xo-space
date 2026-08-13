@@ -124,7 +124,7 @@ class SpaceWikiTests(unittest.TestCase):
         self.assertIn("support.google.com/docs/answer/190843", wiki)
         index = (ROOT / "space_ui" / "index.html").read_text(encoding="utf-8")
         self.assertIn("css/wiki.css?v=20260725-collaboration1", index)
-        self.assertIn("js/app.js?v=20260813-wikisetup1", index)
+        self.assertIn("js/app.js?v=20260813-update1", index)
 
     def test_wiki_has_a_dedicated_guide_for_every_top_level_tab(self) -> None:
         wiki = (ROOT / "space_ui" / "js" / "views" / "wiki.js").read_text(

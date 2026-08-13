@@ -419,14 +419,16 @@ const TAB_GUIDES={
     name:'Setup',
     kicker:'Tab guide · Local runtime configuration',
     title:'Setup: configure this installation',
-    intro:'Setup controls host storage roots, the active chat backend, watcher coverage and cadence, native runtime mounts, write-only credentials, and managed process restarts.',
-    facts:['typed settings','write-only secrets','root-aware','restart truthful'],
+    intro:'Setup controls host storage roots, the active chat backend, watcher coverage and cadence, native runtime mounts, write-only credentials, managed process restarts, and git-backed self-update of the xo-space checkout.',
+    facts:['typed settings','write-only secrets','root-aware','restart truthful','git self-update'],
     jobs:[
       ['Choose storage','View and configure the host XO projects root and machine-local .quirq root.'],
       ['Choose runtime behavior','Select the active agent, enable the watcher, set source coverage, and tune the tick interval.'],
-      ['Connect credentials','Set, replace, or remove environment values without reading saved plaintext back.']
+      ['Connect credentials','Set, replace, or remove environment values without reading saved plaintext back.'],
+      ['Stay current','Check the git remote for a newer xo-space and fast-forward the checkout; the new version runs after a restart.']
     ],
     sources:[
+      ['GET /space/update/status + POST /space/update/apply','Compares HEAD with the checkout’s own remote via git and fast-forwards on request; refuses dirty or diverged checkouts.','Self-update'],
       ['GET/PUT /api/runtime-config','Reads and validates agent and watcher settings in .quirq/runtime.env.','Non-secret configuration'],
       ['PUT /api/runtime-config/roots','Writes desired host roots to .quirq/roots.env.','Installer configuration'],
       ['GET/PATCH/DELETE /api/secrets','Returns names/status and writes values to .quirq/secrets.env.','Write-only credentials'],
