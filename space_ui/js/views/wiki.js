@@ -54,10 +54,10 @@ const PAGES=[
     summary:'See every XO project grouped by Engineering, Ops, Documentation, Research, or Marketing.'
   },
   {
-    id:'tab-graph',
+    id:'tab-files',
     section:'Tab guides',
-    title:'Graph tab',
-    summary:'Navigate the generated XO workspace map, focus nodes, and follow relationships.'
+    title:'Files tab',
+    summary:'One home for the workspace: the operational project List first, the relationship Graph a lens switch away.'
   },
   {
     id:'tab-timeline',
@@ -70,12 +70,6 @@ const PAGES=[
     section:'Tab guides',
     title:'Sessions tab',
     summary:'Compare Claude Code, Codex, and Cursor telemetry with source filters, honest cost states, pagination, and prompt turns.'
-  },
-  {
-    id:'tab-projects',
-    section:'Tab guides',
-    title:'Projects tab',
-    summary:'Inspect discovered projects, durable .xo history, todos, and live .quirq presence.'
   },
   {
     id:'tab-wiki',
@@ -106,10 +100,9 @@ const ARTICLES={
   flows:flowsArticle,
   collaboration:collaborationArticle,
   'tab-dashboard':()=>tabGuideArticle('dashboard'),
-  'tab-graph':()=>tabGuideArticle('graph'),
+  'tab-files':()=>tabGuideArticle('files'),
   'tab-timeline':()=>tabGuideArticle('timeline'),
   'tab-sessions':()=>tabGuideArticle('sessions'),
-  'tab-projects':()=>tabGuideArticle('projects'),
   'tab-wiki':()=>tabGuideArticle('wiki'),
   'tab-quirq':()=>tabGuideArticle('quirq'),
   'tab-setup':()=>tabGuideArticle('setup')
@@ -207,7 +200,7 @@ const TAB_GUIDES={
     ],
     steps:[
       ['Enter Dashboard','It is the first top-level tab and the default Space route.'],
-      ['Enter the map','Dismiss the introduction to reveal project nodes, five labeled anchors, and the dashed environment boundaries around their members.'],
+      ['Read the map','The map renders immediately: project nodes, five labeled anchors, and the dashed environment boundaries around their members.'],
       ['Read a boundary','The tinted area is the environment. Its small internal group point is only a layout/focus anchor; it is not the environment’s data representation.'],
       ['Focus','Click a project or environment anchor; double-click an anchor to expand or collapse its primary project set.'],
       ['Search','Press / and search projects by name.'],
@@ -220,45 +213,52 @@ const TAB_GUIDES={
       ['Environment has no boundary','An empty environment keeps its label but has no project area to enclose.'],
       ['Graph switches with a reload','That reset is intentional so Dashboard and Graph never share stale physics or selection state.']
     ],
-    note:'Dashboard environments are collections of project nodes. The dashed hull is the collection; the anchor only gives the physics, label, focus, and filtering controls a stable target. Dashboard and Graph are read-only and write neither project files, .xo, nor .quirq.'
+    note:'Dashboard environments are collections of project nodes. The dashed hull is the collection; the anchor only gives the physics, label, and focus a stable target. Dashboard and the Files graph are read-only and write neither project files, .xo, nor .quirq.'
   },
-  graph:{
-    tab:'graph',
-    name:'Graph',
-    kicker:'Tab guide · Workspace relationships',
-    title:'Graph: explore the shape of XO',
-    intro:'Graph turns the XO projects root into an interactive map of projects, clusters, artifacts, and explicit cross-links. It is a navigation and discovery surface, not a filesystem editor.',
-    facts:['live generated map','30-second server cache','search + graph re-rooting','read-only'],
+  files:{
+    tab:'projects',
+    name:'Files',
+    kicker:'Tab guide · Workspace map and project state',
+    title:'Files: one home, two lenses',
+    intro:'Files combines the former Projects and Graph tabs behind one List | Graph switch. It lands on the List lens: every project operationally, with per-project todos, open sessions, and recent events. The Graph lens maps the same workspace as projects, clusters, artifacts, and cross-links. Both lenses are read-only.',
+    facts:['lands on List','List | Graph lens switch','live generated map','portable .xo history','live .quirq presence','read-only'],
     jobs:[
-      ['Find an artifact','Search by title, tag, project, or cluster and fly directly to the matching node.'],
+      ['Find an artifact','In the Graph lens, search by title, tag, project, or cluster and fly directly to the matching node.'],
       ['Understand relationships','Select a node to inspect its neighborhood and follow parent, cluster, and cross-project ties.'],
-      ['Change perspective','Use Graph root to temporarily reorganize the layout around any node without changing the XO filesystem.']
+      ['Change perspective','Use Graph root to temporarily reorganize the layout around any node without changing the XO filesystem.'],
+      ['Review active work','In the List lens, open a project drawer to inspect todos, current sessions, and the latest normalized timeline events.'],
+      ['Jump between lenses','Use a List row’s Map action to focus that project on the Graph; use “Show on timeline” from the Graph to carry a run into Timeline.']
     ],
     sources:[
-      ['GET /space/data/space.json','Generated by build_space_data() from the XO projects root and portable project metadata.','Live primary source'],
-      ['<XO root>/<project>/.xo/','Project identity and derived session/history metadata help label and connect work.','Watcher + adapter output'],
-      ['space_ui/data/space.json','Bundled fallback used only when live graph generation fails.','Static fallback']
+      ['GET /space/data/space.json','Generated by build_space_data() from the XO projects root and portable project metadata; feeds the Graph lens.','Live primary source'],
+      ['<XO root>/<project>/.xo/project.json','Gates project discovery and supplies each project’s display name and description; dates, git history, and cross-ties come from the project’s git log, not from .xo session data.','Portable project identity'],
+      ['GET /api/xo-projects (+ /todos, /timeline, /activity per project)','Feeds the List lens: identity, portable todos and history, and machine-local live presence. Each drawer panel fetches independently.','List lens data'],
+      ['<SPACE_DIR>/data/space.json','Optional static fallback consulted only when live generation fails; no file is bundled, so a builder failure normally returns 503 and the no-data card.','Optional fallback']
     ],
     steps:[
-      ['Search','Press / or use the top-right search field.'],
+      ['Pick a lens','Files opens in the List; switch with the List | Graph pill at the top left. #/projects and #/graph deep-link each lens directly.'],
+      ['Search','Press / or use the top-right search field (Graph lens).'],
       ['Focus','Click a node; double-click clusters to expand or collapse them.'],
-      ['Inspect','Read the detail panel and relationship list.'],
+      ['Expand one row','In the List lens each drawer loads independently, so one failed data source does not hide the others.'],
       ['Follow time','Choose “Show on timeline” to carry the selected run into Timeline.']
     ],
     checks:[
       ['Empty graph','Confirm the XO root in Setup and verify GET /space/data/space.json.'],
+      ['Project missing from the List','Verify the XO root and ensure the folder is a direct child of it.'],
+      ['Unscaffolded badge','The folder exists but lacks canonical project metadata.'],
+      ['No open sessions','This is a valid live-presence zero, not proof that no historical work exists.'],
       ['Unexpected root label','Graph root is an in-view lens, not the host XO directory configured in Setup.'],
-      ['Stale result','The generated payload is cached for up to 30 seconds.'],
-      ['Missing relationship','The link must exist in the generated project/artifact map; Graph does not infer conversation semantics.']
+      ['Stale result','The generated graph payload is cached for up to 30 seconds; the List refetches on Refresh.'],
+      ['No List | Graph pill on Dashboard','Intentional: Dashboard shares the canvas but is its own tab, not a Files lens.']
     ],
-    note:'Graph reads derived metadata and project structure. It never writes project files, .xo, or .quirq.'
+    note:'Files reads derived metadata and project structure. It never writes project files, .xo, or .quirq; the watcher owns .xo writes.'
   },
   timeline:{
     tab:'time',
     name:'Timeline',
     kicker:'Tab guide · Time and relationships',
     title:'Timeline: when work happened',
-    intro:'Timeline uses the same generated workspace map as Graph, but arranges dated work into vertical columns with time flowing upward: newest at the top, oldest at the bottom. Two modes: By file plots every dated artifact, and By project plots each project’s git commit history in parallel columns.',
+    intro:'Timeline always plots the workspace dataset (space.json); opening it from Dashboard reloads once to switch datasets. It arranges dated work into vertical columns with time flowing upward: newest at the top, oldest at the bottom. Two modes: By file plots every dated artifact, and By project plots each project’s git commit history in parallel columns.',
     facts:['same graph dataset','By file / By project modes','parallel git histories','newest at the top','date scrubber','playback mode'],
     jobs:[
       ['Replay growth','Scrub or play through the workspace to see artifacts appear in chronological order.'],
@@ -290,7 +290,7 @@ const TAB_GUIDES={
     intro:'Sessions combines the telemetry sources available on this machine. It summarizes tokens, cost availability, durations, models, tools, typed prompt exchanges, and trends without putting prompt text in the aggregate payload.',
     facts:['Claude Code + Codex + Cursor discovery','today / 7d / 30d / all','source filters + pagination','lazy prompt details'],
     jobs:[
-      ['Measure usage','Compare fresh, output, cache-read, and cache-write tokens over a consistent date window.'],
+      ['Measure usage','Compare total token volume over a consistent date window, then open a session’s detail for its fresh, output, cache-read, and cache-write breakdown.'],
       ['Inspect sessions','Filter and sort individual sessions, page through the newest rows, then open a focused telemetry summary.'],
       ['Follow exchanges','Open Prompts by turn to see each typed prompt with the replies and tool calls it initiated.'],
       ['Compare behavior','Review model mix, tool frequency, duration, available cost estimates, and trend heatmaps across runtimes.']
@@ -310,8 +310,8 @@ const TAB_GUIDES={
       ['Refresh','Use Refresh after new telemetry has reached a native runtime store.']
     ],
     checks:[
-      ['503 for all sources','Confirm at least one native runtime directory is mounted and readable inside the container.'],
-      ['One source unavailable','The rest of the dashboard should keep working; verify that source’s configured root and mount.'],
+      ['503 for all sources','Confirm at least one native runtime store exists and is readable on this machine (ARGUS_DB, CODEX_HOME, CURSOR_HOME, or their defaults under your home directory).'],
+      ['One source unavailable','The rest of the dashboard should keep working; verify that source’s configured root exists and is readable.'],
       ['Zero vs unclassified','A runtime may report an authoritative session total without exposing the full fresh/output/cache breakdown.'],
       ['Cost unavailable','Codex and Cursor costs are shown as unavailable instead of a misleading $0; Argus values remain estimates, not invoices.'],
       ['Prompts unavailable','That runtime may not support prompt details, or its native transcript may have been cleaned up.'],
@@ -319,44 +319,12 @@ const TAB_GUIDES={
     ],
     note:'Sessions reads native runtime stores without modifying them. Projects remains the better tab for todos, live presence, and normalized .xo/.quirq history.'
   },
-  projects:{
-    tab:'projects',
-    name:'Projects',
-    kicker:'Tab guide · XO project state',
-    title:'Projects: inspect durable work',
-    intro:'Projects discovers folders under the configured XO root and combines portable .xo metadata with machine-local live presence. It is the most direct UI for watcher-derived project state.',
-    facts:['filesystem discovery','portable .xo history','live .quirq presence','independent panels'],
-    jobs:[
-      ['Find a project','See every scaffolded and unscaffolded directory under the XO root.'],
-      ['Review active work','Open a project to inspect todos and current sessions.'],
-      ['Review recent history','Read the latest normalized timeline events without opening raw JSONL.']
-    ],
-    sources:[
-      ['GET /api/xo-projects','Project identity and discovery from <XO root>/<project>/.xo/project.json.','Project list'],
-      ['GET /api/xo-projects/{id}/todos','Reads portable <project>/.xo/todos.json.','Durable project work'],
-      ['GET /api/xo-projects/{id}/timeline?limit=20','Reads portable <project>/.xo/timeline.jsonl.','Durable project history'],
-      ['GET /api/xo-projects/{id}/activity','Reads .quirq/watcher/activity/projects/<id>.json.','Ephemeral live presence']
-    ],
-    steps:[
-      ['Refresh projects','Fetch the latest root directory and project identity.'],
-      ['Expand one row','Each drawer loads independently so one failed data source does not hide the others.'],
-      ['Read lifecycle','Todos show pending, in-progress, completed, blocked, and cancelled work.'],
-      ['Follow history','Use recent events for a bounded operational trail.']
-    ],
-    checks:[
-      ['Project missing','Verify the XO root and ensure the folder is a direct child of it.'],
-      ['Unscaffolded badge','The folder exists but lacks canonical project metadata.'],
-      ['No open sessions','This is a valid live-presence zero, not proof that no historical work exists.'],
-      ['Old activity.json','Legacy <project>/.xo/activity.json is ignored; current presence is in .quirq.']
-    ],
-    note:'The watcher owns .xo writes. Humans and agents should use documented APIs or native task tools rather than hand-editing these files.'
-  },
   wiki:{
     tab:'wiki',
     name:'Wiki',
     kicker:'Tab guide · Local documentation',
     title:'Wiki: the operating manual',
-    intro:'Wiki ships with the application and documents the exact storage, watcher, installation, flow, and tab contracts for this version. It works offline and requires no external documentation service.',
+    intro:'Wiki ships with the application and documents the exact storage, watcher, installation, flow, and tab contracts for this version. It works offline and requires no external documentation service. It is not a top-level tab: open it with the Open the wiki button in Setup’s header, or deep-link to #/wiki; the Setup tab stays highlighted while it is open.',
     facts:['versioned with code','offline','architecture + operations','one page per tab'],
     jobs:[
       ['Learn the boundaries','Start with Storage & data map before designing a new flow.'],
@@ -375,8 +343,8 @@ const TAB_GUIDES={
       ['Keep docs current','Whenever a tab changes data source or behavior, update its guide in the same code change.']
     ],
     checks:[
-      ['Page seems stale','Reload after a new container image; Wiki is versioned static application code.'],
-      ['Path differs','Setup reports the actual host and container roots for this installation.'],
+      ['Page seems stale','Update from Setup (git self-update), restart the server, then reload; Wiki is versioned static application code, so pages change only with the code.'],
+      ['Path differs','Setup reports the actual roots configured for this installation.'],
       ['Need raw secrets','Wiki intentionally documents secret handling without revealing saved values.'],
       ['Need a new guide','Add it to PAGES and ARTICLES so navigation and content remain coupled.']
     ],
@@ -494,7 +462,7 @@ function tabGuideArticle(id){
 
       <aside class="wiki-callout wiki-tab-callout">
         <div><b>Boundary to remember</b><p>${guide.note}</p></div>
-        <button type="button" data-open-tab="${guide.tab}">Open ${guide.name} tab</button>
+        ${guide.tab==='wiki'?'':`<button type="button" data-open-tab="${guide.tab}">Open ${guide.name}</button>`}
       </aside>
     </article>`;
 }
@@ -621,7 +589,7 @@ function installationArticle(){
         <div class="wiki-facts">
           <span>no Docker</span>
           <span>no clone or checkout to manage</span>
-          <span>default localhost:5003</span>
+          <span>default localhost:5002</span>
           <span>self-contained folder</span>
         </div>
       </header>
@@ -631,8 +599,9 @@ function installationArticle(){
         <div class="wiki-check-grid">
           <div><b>git</b><p>Required. Quirq uses it to download itself, and
           at runtime for project sync and history.</p></div>
-          <div><b>curl</b><p>Used once to stream the small installer into
-          your shell.</p></div>
+          <div><b>curl</b><p>Streams the installer into your shell, and the
+          installer uses it again to fetch uv if uv is not already
+          installed.</p></div>
           <div><b>A coding runtime</b><p>Claude Code, OpenClaw, Hermes, or
           Antigravity is needed only for chat. The API, Wiki, and project
           views start without one.</p></div>
@@ -657,7 +626,7 @@ function installationArticle(){
           the server, prepares the environment, starts the server in the
           foreground, and prints the browser URL.</p></li>
           <li><b>Open the workspace.</b>
-          <code>http://localhost:5003/space/</code>
+          <code>http://localhost:5002/space/</code>
           <p>Press Ctrl-C to stop the server. Re-run the same installer
           command whenever you want to update and restart.</p></li>
         </ol>
@@ -711,13 +680,16 @@ function installationArticle(){
         <h2>One stable local address</h2>
         <div class="wiki-decision-list">
           <div><b>Browser address</b><p>Open
-          <code>http://localhost:5003/space/</code>.</p></div>
+          <code>http://localhost:5002/space/</code>.</p></div>
           <div><b>Changing the port</b><p>Every value is overridable from the
           environment, e.g. <code>PORT=8080</code> before the installer
           command. First-run choices are recorded in the checkout's
           <code>.env</code>.</p></div>
-          <div><b>Port 5003 is already busy</b><p>Startup fails clearly so it
-          never replaces or stops another local service.</p></div>
+          <div><b>Port 5002 is already busy</b><p>The installer fails clearly
+          so it never replaces or stops another local service; set
+          <code>PORT</code> to run a second instance. (When the server
+          resolves its own port, e.g. contributor mode, it falls back to
+          5003 automatically.)</p></div>
           <div><b>Binding</b><p>The server listens on
           <code>127.0.0.1</code> by default; override <code>HOST</code>
           deliberately if you need more.</p></div>
@@ -728,17 +700,17 @@ function installationArticle(){
         <h2>Verify the running server</h2>
         <div class="wiki-recipe">
           <div class="wiki-recipe-step"><small>1</small><b>Health</b>
-          <code>curl http://127.0.0.1:5003/health</code>
+          <code>curl http://127.0.0.1:5002/health</code>
           <p>Use the selected port and expect
           <code>"status":"healthy"</code>.</p></div>
           <i>→</i>
           <div class="wiki-recipe-step"><small>2</small><b>XO root</b>
-          <code>curl http://127.0.0.1:5003/api/config/workspace</code>
+          <code>curl http://127.0.0.1:5002/api/config/workspace</code>
           <p><code>roots[default]</code> should be the directory you
           launched the installer from.</p></div>
           <i>→</i>
           <div class="wiki-recipe-step"><small>3</small><b>Projects</b>
-          <code>curl http://127.0.0.1:5003/api/xo-projects</code>
+          <code>curl http://127.0.0.1:5002/api/xo-projects</code>
           <p>Confirm the expected project ids are discovered.</p></div>
         </div>
       </section>
@@ -973,7 +945,7 @@ function xoDataArticle(){
           </article>
 
           <article class="wiki-file">
-            <header><code>peers.json</code><span>collaboration-owned</span></header>
+            <header><code>peers.json</code><span>schema-defined · scaffolded</span></header>
             <p>Human collaborator roster: user id, owner/collaborator/viewer
             role, add time, and optional endpoint and label. An empty list
             means the project is currently solo.</p>
@@ -981,10 +953,12 @@ function xoDataArticle(){
           </article>
 
           <article class="wiki-file">
-            <header><code>sync.json</code><span>sync service-owned</span></header>
+            <header><code>sync.json</code><span>schema-defined · reserved</span></header>
             <p>Per-peer synchronization state: vector clock, manifest hash,
             last pull/push timestamps, pending outbox count, and overall last
-            sync time.</p>
+            sync time. Both peers.json and sync.json are scaffolded empty from
+            the project template today; their shapes are fixed by the bundled
+            schemas, and no service in this build writes them yet.</p>
             <dl><div><dt>Used for</dt><dd>conflict-aware project synchronization</dd></div><div><dt>Not activity</dt><dd>it describes replication progress, not current presence</dd></div></dl>
           </article>
         </div>
@@ -1027,9 +1001,10 @@ function xoDataArticle(){
 
       <aside class="wiki-callout">
         <b>Read, do not hand-edit</b>
-        <p>The service, adapters, todo API, collaboration service, and sync
-        service own these documents. Direct edits can be overwritten or break
-        writer coordination.</p>
+        <p>The service, adapters, and todo API own these documents;
+        peers.json and sync.json are scaffold-only, reserved for future
+        collaboration and sync services. Direct edits can be overwritten or
+        break writer coordination.</p>
       </aside>
     </article>`;
 }
@@ -1056,11 +1031,12 @@ function quirqDataArticle(){
         <pre class="wiki-tree">~/.quirq/
 ├── state.json
 ├── runtime.env                 # mode 0600; typed restart-time controls
-├── roots.env                   # mode 0600; next host bind-mount roots
+├── roots.env                   # mode 0600; roots applied by the next installer run
+├── quirq.log                   # server output appended by the installer's run loop
 ├── secrets.env                 # mode 0600; write-only credentials from Setup
 └── watcher/
     ├── offsets.json
-    ├── hermes-offsets.json       # only when Hermes is active
+    ├── hermes-offsets.json       # only when the Hermes source is watched
     ├── locks/
     │   └── todos.json.&lt;hash&gt;.lock
     └── activity/
@@ -1104,10 +1080,12 @@ function quirqDataArticle(){
 
           <article class="wiki-file">
             <header><code>secrets.env</code><span>sensitive environment values</span></header>
-            <p>Stores the key/value pairs saved through the Setup tab. List
-            APIs return names and masked status only; the tab never reads saved
-            plaintext back. The file is written atomically with owner-only
-            permissions and loaded when Quirq starts.</p>
+            <p>Stores the key/value pairs saved through the Setup tab. The
+            curated list API returns names and a fixed mask only, and the tab
+            never reads saved plaintext back; plaintext is reachable only
+            through the single-key reveal endpoint and the legacy
+            /api/secrets/env route. The file is written atomically with
+            owner-only permissions and loaded when Quirq starts.</p>
             <dl><div><dt>Writer</dt><dd>curated secrets API</dd></div><div><dt>Delete effect</dt><dd>removes the value from disk and from new child-process environments</dd></div></dl>
           </article>
 
@@ -1349,7 +1327,8 @@ function collaborationArticle(){
             <code>Uint8Array</code>. Recreating a Yjs document from exported
             JSON starts a different history and can duplicate merged
             content.</dd></div><div><dt>Deployment</dt><dd>Run it beside the
-            existing FastAPI service in the one-command Docker stack.</dd></div></dl>
+            FastAPI service the one-command installer starts natively; a
+            future compose stack could bundle both.</dd></div></dl>
           </article>
 
           <article class="wiki-file">
@@ -1566,8 +1545,9 @@ function collaborationArticle(){
           derived, secret, and presence classes. Add schema versions and
           forbid cross-boundary writes.</p></li>
           <li><b>Add the collaboration foundation</b><p>Run Hocuspocus and
-          PostgreSQL in the Docker stack, issue document-scoped tokens from
-          FastAPI, and connect Yjs with IndexedDB in the Space UI.</p></li>
+          PostgreSQL alongside the natively installed API, issue
+          document-scoped tokens from FastAPI, and connect Yjs with
+          IndexedDB in the Space UI.</p></li>
           <li><b>Start with wiki pages and flows</b><p>Deliver live editing,
           presence, autosave, named versions, preview, diff, and restore on
           data that is genuinely human-authored.</p></li>
@@ -1590,12 +1570,12 @@ function collaborationArticle(){
           API, collaboration service, and local persistence together. Browser
           tabs on the same machine can collaborate immediately.</p></div>
           <div><b>Multi-machine collaboration</b><p>A service bound only to
-          <code>localhost:5003</code> is not reachable by peers. Deploy or
+          <code>localhost:5002</code> is not reachable by peers. Deploy or
           expose the collaboration endpoint through TLS and configure the
           local Quirq client with its <code>wss://</code> URL.</p></div>
           <div><b>Keep one command</b><p>The human-facing installer can still
-          be one command even if Docker starts an API container, collaboration
-          container, PostgreSQL, and optional Redis behind it.</p></div>
+          be one command even if a future stack starts the API, collaboration
+          service, PostgreSQL, and optional Redis behind it.</p></div>
           <div><b>Keep local state replaceable</b><p>A local collaboration
           cache may live under <code>.quirq</code>, but the shared server
           remains authoritative and the cache must be safe to delete and
@@ -1728,7 +1708,7 @@ function flowsArticle(){
       <section class="wiki-section">
         <h2>Flow 3 · “Which session should I inspect?”</h2>
         <div class="wiki-recipe">
-          <div class="wiki-recipe-step"><small>1</small><b>Start from the index</b><code>GET /api/xo-projects/{id}/usage/sessions</code><p>Sort by last activity and show runtime, totals, and task/message counters.</p></div>
+          <div class="wiki-recipe-step"><small>1</small><b>Start from the index</b><code>GET /api/xo-projects/{id}/usage/sessions</code><p>Sort by last activity and show token totals and message counts; derive the runtime from the composite key. Task counters are not in the index; fetch todos or the session detail for task state.</p></div>
           <i>→</i>
           <div class="wiki-recipe-step"><small>2</small><b>Select one identity</b><p>Keep the composite key as the stable list identity; native session id is also accepted for lookup.</p></div>
           <i>→</i>

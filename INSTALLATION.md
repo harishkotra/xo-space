@@ -6,7 +6,7 @@ Pick a directory to keep Quirq in, then run:
 curl -fsSL https://raw.githubusercontent.com/quirq-ai/xo-space/main/install.sh | bash
 ```
 
-Open <http://localhost:5003/space/>.
+Open <http://localhost:5002/space/>.
 
 Docker is not required. The command:
 
@@ -97,7 +97,7 @@ Every value is overridable from the environment:
 
 | Variable | Default |
 |---|---|
-| `PORT` | `5003` |
+| `PORT` | `5002` |
 | `HOST` | `127.0.0.1` |
 | `XO_PROJECTS_ROOT` | the launch directory |
 | `QUIRQ_STATE_ROOT` | `./.quirq` |

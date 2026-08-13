@@ -2,6 +2,10 @@
   #view-projects{overflow-y:auto}
   .prj{max-width:1180px;margin:0 auto;padding:26px 26px 60px;font-family:var(--sans)}
   .prj-head{display:flex;align-items:center;margin-bottom:18px}
+  .prj-head .fileslens-list{margin-right:14px}
+  .prj-map{font:400 9.5px var(--mono);letter-spacing:.08em;text-transform:uppercase;
+    color:var(--ink-2);border:1px solid var(--line);border-radius:999px;padding:4px 10px;margin-left:12px}
+  .prj-map:hover{color:var(--ink);border-color:#39404d}
   .prj-eyebrow{font:600 10.5px/1 var(--mono);letter-spacing:.14em;color:var(--ink-3)}
   .prj-spacer{flex:1}
   .prj-rows{display:flex;flex-direction:column;gap:10px}

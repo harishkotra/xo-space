@@ -68,11 +68,15 @@ const PANELS=[
 ];
 
 let root=null,items=null,expanded=null;
+let switchTo=()=>{}; /* ctx.switchTo, captured on mount */
 
 export default {
-  id:'projects',label:'Projects',order:5,
-  async mount(el){
+  /* The Files tab lands here, on the List lens; the Graph lens (atlas) is
+     nav:false with parent:'projects' so this tab stays lit for both. */
+  id:'projects',label:'Files',order:1,
+  async mount(el,ctx){
     root=el;
+    switchTo=ctx.switchTo;
     el.innerHTML='<div class="prj"><div class="prj-note">loading projects…</div></div>';
     await loadList();
   },
@@ -90,14 +94,26 @@ async function loadList(){
 function render(){
   const un=items.filter(p=>p.unscaffolded).length;
   root.querySelector('.prj').innerHTML=
-    '<div class="prj-head"><span class="prj-eyebrow">PROJECTS · '+items.length
+    '<div class="prj-head">'
+    +'<div class="atlas-lens-switch fileslens-list" aria-label="Files lens">'
+      +'<button class="is-on" type="button" data-files-lens="projects">List</button>'
+      +'<button type="button" data-files-lens="graph">Graph</button>'
+    +'</div>'
+    +'<span class="prj-eyebrow">PROJECTS · '+items.length
       +(un?' · '+un+' unscaffolded':'')+'</span>'
     +'<span class="prj-spacer"></span>'
     +'<button class="sess-refresh" id="prj-refresh" title="Re-fetch the project list">&#8635; Refresh</button></div>'
     +(items.length?'<div class="prj-rows">'+items.map(rowHTML).join('')+'</div>'
       :'<div class="prj-note">no projects in the workspace yet</div>');
   document.getElementById('prj-refresh').addEventListener('click',loadList);
+  root.querySelectorAll('[data-files-lens]').forEach(b=>
+    b.addEventListener('click',()=>switchTo(b.dataset.filesLens)));
   root.querySelectorAll('.prj-row-head').forEach(h=>h.addEventListener('click',()=>toggle(h.dataset.id)));
+  root.querySelectorAll('.prj-map').forEach(b=>b.addEventListener('click',e=>{
+    e.stopPropagation();
+    switchTo('graph');
+    dispatchEvent(new CustomEvent('space:focus-project',{detail:b.dataset.map}));
+  }));
   if(expanded)fillDrawer(expanded);
 }
 function rowHTML(p){
@@ -110,6 +126,7 @@ function rowHTML(p){
     +(p.unscaffolded?'<span class="tchip st-blocked">unscaffolded</span>':'')
     +'<span class="prj-spacer"></span>'
     +'<span class="tmuted">'+(p.created_at?'created '+rel(p.created_at):'')+'</span>'
+    +'<button class="prj-map" type="button" data-map="'+esc(p.id)+'" title="Focus this project on the graph">Map</button>'
     +'</div>'
     +(open?'<div class="prj-drawer">'
       +(p.description?'<p class="prj-desc">'+esc(p.description)+'</p>':'')

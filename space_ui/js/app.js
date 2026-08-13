@@ -3,12 +3,12 @@
    bundler, so no file globbing; this import list is the one manual step. */
 import {registerView,startRegistry} from './core/registry.js?v=20260813-timeline2';
 import {initServerWidget} from './core/server-widget.js';
-import {dashboardView,graphView,timeView} from './views/atlas.js?v=20260813-wikisetup1';
+import {dashboardView,graphView,timeView} from './views/atlas.js?v=20260813-timeline3';
 import sessionsView from './views/sessions.js?v=20260725-sessions2';
-import projectsView from './views/projects.js';
+import projectsView from './views/projects.js?v=20260813-files2';
 /* Chat is deliberately hidden from the tab bar: re-import ./views/chat.js
    and register it below to bring the tab back. */
-import wikiView from './views/wiki.js?v=20260813-update1';
+import wikiView from './views/wiki.js?v=20260813-timeline3';
 import quirqView from './views/quirq.js?v=20260725-quirq3';
 import secretsView from './views/secrets.js?v=20260813-update1';
 

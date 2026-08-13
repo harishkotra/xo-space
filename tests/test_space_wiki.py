@@ -77,6 +77,18 @@ class SpaceWikiTests(unittest.TestCase):
         self.assertNotIn("view-six", index)
         self.assertNotIn("SIX DEGREES", atlas)
         self.assertNotIn("sixView", atlas)
+        # Graph and Projects merged into one Files tab that lands on the
+        # List lens; the Graph is the nav-less second lens behind the pill.
+        # The dept-filter chips row is gone from the canvas.
+        self.assertIn('id="fileslens-graph"', index)
+        self.assertNotIn('id="chips"', index)
+        self.assertIn("nav:false,parent:'projects'", atlas)
+        projects = (
+            ROOT / "space_ui" / "js" / "views" / "projects.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn("id:'projects',label:'Files',order:1", projects)
+        self.assertIn("space:focus-project", projects)
+        self.assertIn("space:focus-project", atlas)
 
     def test_wiki_documents_the_storage_boundary_and_flow_pages(self) -> None:
         wiki = (ROOT / "space_ui" / "js" / "views" / "wiki.js").read_text(
@@ -87,9 +99,9 @@ class SpaceWikiTests(unittest.TestCase):
         self.assertIn("Install & run locally", wiki)
         self.assertIn("raw.githubusercontent.com", wiki)
         self.assertIn("no clone or checkout", wiki)
-        self.assertIn("localhost:5003", wiki)
+        self.assertIn("localhost:5002", wiki)
         self.assertIn("./cowork-api.sh dev", wiki)
-        self.assertIn("127.0.0.1:5003", wiki)
+        self.assertIn("127.0.0.1:5002", wiki)
         self.assertIn("How the watcher works", wiki)
         self.assertIn("Everything in .xo", wiki)
         self.assertIn("Everything in .quirq", wiki)
@@ -124,7 +136,7 @@ class SpaceWikiTests(unittest.TestCase):
         self.assertIn("support.google.com/docs/answer/190843", wiki)
         index = (ROOT / "space_ui" / "index.html").read_text(encoding="utf-8")
         self.assertIn("css/wiki.css?v=20260725-collaboration1", index)
-        self.assertIn("js/app.js?v=20260813-update1", index)
+        self.assertIn("js/app.js?v=20260813-timeline3", index)
 
     def test_wiki_has_a_dedicated_guide_for_every_top_level_tab(self) -> None:
         wiki = (ROOT / "space_ui" / "js" / "views" / "wiki.js").read_text(
@@ -133,18 +145,20 @@ class SpaceWikiTests(unittest.TestCase):
 
         for page_id in (
             "tab-dashboard",
-            "tab-graph",
+            "tab-files",
             "tab-timeline",
             "tab-sessions",
-            "tab-projects",
             "tab-wiki",
             "tab-quirq",
             "tab-setup",
         ):
             self.assertIn(f"id:'{page_id}'", wiki)
             self.assertIn(f"'{page_id}':", wiki)
-        # Chat is hidden from the tab bar, so it gets no tab guide.
+        # Chat is hidden from the tab bar, so it gets no tab guide; Graph and
+        # Projects merged into the Files tab and its single guide.
         self.assertNotIn("id:'tab-chat'", wiki)
+        self.assertNotIn("id:'tab-graph'", wiki)
+        self.assertNotIn("id:'tab-projects'", wiki)
         app = (ROOT / "space_ui" / "js" / "app.js").read_text(encoding="utf-8")
         self.assertNotIn("registerView(chatView)", app)
         self.assertIn("newest at the top", wiki)
@@ -156,7 +170,7 @@ class SpaceWikiTests(unittest.TestCase):
         guide = (ROOT / "INSTALLATION.md").read_text(encoding="utf-8")
 
         self.assertIn("curl -fsSL", guide)
-        self.assertIn("localhost:5003", guide)
+        self.assertIn("localhost:5002", guide)
         # Piping to `sh` fails: the installer uses BASH_SOURCE and pipefail.
         self.assertIn("| bash", guide)
         self.assertNotIn("| sh\n", guide)

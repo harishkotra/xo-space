@@ -14,6 +14,19 @@ const hooks={};  /* boot() assigns lifecycle hooks here once it has run */
 let bootPromise=null;
 let bootDataset=null;
 
+/* Files lens pill (Graph | List): static markup in #view-graph; the List
+   half of the pill lives in the projects view. Cross-lens focus: the List's
+   "Map" action dispatches space:focus-project; if the graph has not booted
+   yet the request is parked until boot consumes it. */
+document.querySelectorAll('[data-files-lens]').forEach(button=>{
+  button.addEventListener('click',()=>go(button.dataset.filesLens));
+});
+let pendingFocus=null;
+addEventListener('space:focus-project',e=>{
+  pendingFocus=String(e.detail||'');
+  if(hooks.focusProject)hooks.focusProject();
+});
+
 const DATASETS={
   dashboard:{url:'data/dashboard.json',label:'Dashboard'},
   graph:{url:'data/space.json',label:'Graph'}
@@ -64,7 +77,7 @@ function renderNoData(el,dataset){
     '<h1>Space reads its map from a local file.</h1>'+
     '<p>This page loads <b>'+source.url+'</b> from this local server, so the data stays on this machine. Serve the folder with the workspace server:</p>'+
     '<pre>cd xo-cowork-api && ./cowork-api.sh start</pre>'+
-    '<p>then open <b>http://localhost:5003/space/</b></p>'+
+    '<p>then open <b>http://localhost:5002/space/</b></p>'+
     '<button id="nodata-retry">Retry</button>';
   el.appendChild(box);
   box.querySelector('#nodata-retry').addEventListener('click',()=>location.reload());
@@ -89,8 +102,28 @@ export const dashboardView={
   ...atlasView('dashboard','Dashboard',0,'graph','dashboard'),
   section:'graph'
 };
-export const graphView=atlasView('graph','Graph',1,'graph','graph');
-export const timeView=atlasView('time','Timeline',2,'time');
+/* Files lands on the List lens (the projects view owns the nav tab); the
+   Graph is its second lens, reachable from the pill or #/graph. */
+export const graphView={
+  ...atlasView('graph','Graph',1,'graph','graph'),
+  nav:false,parent:'projects'
+};
+/* Timeline is pinned to the workspace dataset (space.json): plotting the
+   Dashboard's 5-environment projection there has no git history and reads
+   as broken. Arriving from Dashboard costs one dataset-switch reload, the
+   same hop Dashboard ↔ Files already makes. */
+export const timeView=atlasView('time','Timeline',2,'time','graph');
+/* The Graph|List pill belongs to Files only; Dashboard shares the canvas
+   section but is its own tab, so it hides the pill. */
+{
+  const pill=()=>document.getElementById('fileslens-graph');
+  const wrapShow=(view,visible)=>{
+    const shown=view.show;
+    view.show=()=>{if(shown)shown();const p=pill();if(p)p.hidden=!visible;};
+  };
+  wrapShow(graphView,true);
+  wrapShow(dashboardView,false);
+}
 
 function boot(DATA,DATA_SOURCE){
 /* ============================== MODEL FROM LOCAL DATA ==============================
@@ -728,23 +761,6 @@ addEventListener('click',e=>{
   if(!e.target.closest('.rootpick'))closeRootDD();
 });
 
-/* dept chips */
-const chipsEl=document.getElementById('chips');
-const chipDefs=[{id:null,label:'All'},...Object.entries(CAT).map(([id,c])=>({id,label:c.name}))];
-chipDefs.forEach(d=>{
-  const b=document.createElement('button');
-  b.textContent=d.label;
-  if(d.id===null)b.classList.add('is-on');
-  b.addEventListener('click',()=>{
-    deptFilter=d.id;
-    [...chipsEl.children].forEach(x=>x.classList.remove('is-on'));
-    b.classList.add('is-on');
-    if(selId&&!isShown(byId.get(selId))){clearFocus();}
-    if(focusSet&&selId)focusSet=neighborhood(selId,focusDepth);
-    reheat(.4);
-  });
-  chipsEl.appendChild(b);
-});
 /* legend + counts */
 {
   const lg=document.getElementById('legend');
@@ -871,11 +887,6 @@ panel.addEventListener('click',e=>{
 });
 function ensureShown(n){
   if(n.type==='leaf'){
-    if(deptFilter&&!belongsToCategory(n,deptFilter)){
-      deptFilter=null;
-      [...chipsEl.children].forEach((x,i)=>x.classList.toggle('is-on',i===0));
-      toast('Filter cleared to reach '+n.label);
-    }
     if(!expanded.get(n.group)){setExp(byId.get(n.group),true);reheat(.4);}
   }
 }
@@ -960,6 +971,17 @@ document.getElementById('root-q').addEventListener('keydown',e=>{
    its internal notion of which of its lenses is active — it gates the sim
    loop and timeline rebuilds — plus the search-focus and clear keys. */
 let view='graph';
+/* List → Graph jump: focus the project's hub (graph dataset, `p_<id>`) or
+   its project node (dashboard dataset, plain id). Unknown ids no-op. */
+hooks.focusProject=()=>{
+  if(!pendingFocus)return;
+  const n=byId.get('p_'+pendingFocus)||byId.get(pendingFocus);
+  pendingFocus=null;
+  if(!n)return;
+  clearPath();
+  select(n.id,1);
+  pulseN={id:n.id,t0:performance.now()};
+};
 hooks.setActiveView=v=>{
   view=v;
   document.querySelectorAll('[data-atlas-lens]').forEach(button=>{
@@ -1410,5 +1432,6 @@ function frame(now){
 }
 requestAnimationFrame(frame);
 renderTimelineState();
+hooks.focusProject(); /* consume a List→Graph jump parked before boot */
 
 }
