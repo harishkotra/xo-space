@@ -1,15 +1,16 @@
 /* Entry point. Adding a view = create js/views/<name>.js exporting the view
    contract (see core/registry.js), then import + register it here — no
    bundler, so no file globbing; this import list is the one manual step. */
-import {registerView,startRegistry} from './core/registry.js?v=20260725-quirq1';
+import {registerView,startRegistry} from './core/registry.js?v=20260813-timeline2';
 import {initServerWidget} from './core/server-widget.js';
-import {dashboardView,graphView,timeView,sixView} from './views/atlas.js?v=20260726-environments1';
+import {dashboardView,graphView,timeView} from './views/atlas.js?v=20260813-wikisetup1';
 import sessionsView from './views/sessions.js?v=20260725-sessions2';
 import projectsView from './views/projects.js';
-import chatView from './views/chat.js';
-import wikiView from './views/wiki.js?v=20260726-environments1';
+/* Chat is deliberately hidden from the tab bar: re-import ./views/chat.js
+   and register it below to bring the tab back. */
+import wikiView from './views/wiki.js?v=20260813-wikisetup1';
 import quirqView from './views/quirq.js?v=20260725-quirq3';
-import secretsView from './views/secrets.js?v=20260725-roots1';
+import secretsView from './views/secrets.js?v=20260813-wikisetup1';
 
 /* app-shell bulkhead: a fatal script error logs instead of white-screening */
 addEventListener('error',e=>console.error('Space shell error:',e.error||e.message));
@@ -19,10 +20,8 @@ try{
   registerView(dashboardView);
   registerView(graphView);
   registerView(timeView);
-  registerView(sixView);
   registerView(sessionsView);
   registerView(projectsView);
-  registerView(chatView);
   registerView(wikiView);
   registerView(quirqView);
   registerView(secretsView);

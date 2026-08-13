@@ -15,7 +15,7 @@ const PAGES=[
     id:'installation',
     section:'Start here',
     title:'Install & run locally',
-    summary:'Prerequisites, one-command development, configuration, verification, and packaging.'
+    summary:'Prerequisites, the one-command native install, configuration, verification, and updates.'
   },
   {
     id:'watcher',
@@ -63,7 +63,7 @@ const PAGES=[
     id:'tab-timeline',
     section:'Tab guides',
     title:'Timeline tab',
-    summary:'Scrub dated workspace artifacts and use the nested Six Degrees relationship tool.'
+    summary:'Scrub dated artifacts by file, or every project’s git history in parallel vertical columns, newest at the top.'
   },
   {
     id:'tab-sessions',
@@ -76,12 +76,6 @@ const PAGES=[
     section:'Tab guides',
     title:'Projects tab',
     summary:'Inspect discovered projects, durable .xo history, todos, and live .quirq presence.'
-  },
-  {
-    id:'tab-chat',
-    section:'Tab guides',
-    title:'Chat tab',
-    summary:'Start and resume agent sessions, stream responses, choose projects, and abort runs.'
   },
   {
     id:'tab-wiki',
@@ -116,7 +110,6 @@ const ARTICLES={
   'tab-timeline':()=>tabGuideArticle('timeline'),
   'tab-sessions':()=>tabGuideArticle('sessions'),
   'tab-projects':()=>tabGuideArticle('projects'),
-  'tab-chat':()=>tabGuideArticle('chat'),
   'tab-wiki':()=>tabGuideArticle('wiki'),
   'tab-quirq':()=>tabGuideArticle('quirq'),
   'tab-setup':()=>tabGuideArticle('setup')
@@ -131,7 +124,10 @@ let activePage='storage';
 let go=()=>{};
 
 export default {
-  id:'wiki',label:'Wiki',order:7,
+  /* No top-level tab: the wiki opens from the button in Setup's header
+     (and stays deep-linkable at #/wiki); Setup's tab lights up while the
+     wiki is open. */
+  id:'wiki',label:'Wiki',order:7,nav:false,parent:'secrets',
   async mount(el,ctx){
     root=el;
     go=ctx.switchTo;
@@ -202,7 +198,7 @@ const TAB_GUIDES={
       ['Survey the workspace','Read each colored boundary as a collection of projects with a shared purpose, not as one aggregate node.'],
       ['See overlap','A project with several purposes remains one node and sits between the applicable environments; every applicable enclosure includes it.'],
       ['Read project form','Node glyphs describe project form independently of purpose: app, one-pager, docs, slides, or unknown.'],
-      ['Trace an environment','Select its labeled anchor or a project and carry that focused set into Timeline or Six Degrees.']
+      ['Trace an environment','Select its labeled anchor or a project and carry that focused set into Timeline.']
     ],
     sources:[
       ['GET /space/data/dashboard.json','Builds the categorized graph from the same bounded live scan as the ordinary Graph tab.','Live primary source'],
@@ -262,29 +258,27 @@ const TAB_GUIDES={
     name:'Timeline',
     kicker:'Tab guide · Time and relationships',
     title:'Timeline: when work happened',
-    intro:'Timeline uses the same generated workspace map as Graph, but arranges dated artifacts into lanes. Six Degrees now lives inside this tab as a second lens for shortest-path exploration.',
-    facts:['same graph dataset','date scrubber','playback mode','Six Degrees nested here'],
+    intro:'Timeline uses the same generated workspace map as Graph, but arranges dated work into vertical columns with time flowing upward: newest at the top, oldest at the bottom. Two modes: By file plots every dated artifact, and By project plots each project’s git commit history in parallel columns.',
+    facts:['same graph dataset','By file / By project modes','parallel git histories','newest at the top','date scrubber','playback mode'],
     jobs:[
       ['Replay growth','Scrub or play through the workspace to see artifacts appear in chronological order.'],
-      ['Trace one cluster','Open a cluster from Graph and carry its related artifacts into a focused timeline trace.'],
-      ['Connect two artifacts','Switch to Six Degrees and calculate the shortest relationship chain between two nodes.']
+      ['Compare project momentum','Switch to By project to read every project’s git history in parallel: one column per project, one dot per commit day, sized by commits.'],
+      ['Trace one cluster','Open a cluster from Graph and carry its related artifacts into a focused timeline trace (a By-file tool; starting one switches the mode back).']
     ],
     sources:[
-      ['GET /space/data/space.json','Provides dated leaves, categories, milestones, and relationship edges.','Live generated source'],
-      ['<project>/.xo/timeline.jsonl','Durable normalized watcher history used by project APIs; it is related data but not the Atlas animation payload itself.','Portable project history'],
-      ['#/six','Backward-compatible deep link for the Six Degrees child lens.','Route compatibility']
+      ['GET /space/data/space.json','Provides dated leaves, categories, milestones, relationship edges, and per-project git history (gitHistory).','Live generated source'],
+      ['<project>/.xo/timeline.jsonl','Durable normalized watcher history used by project APIs; it is related data but not the Atlas animation payload itself.','Portable project history']
     ],
     steps:[
-      ['Choose Timeline','Use the segmented control at the top of the view.'],
-      ['Set a date','Drag the scrubber or press Play.'],
-      ['Inspect a point','Hover or select an artifact to view its label and relationship context.'],
-      ['Use Six Degrees','Pick From and To, connect them, then trace the path back on Timeline or Graph.']
+      ['Choose Timeline','Use the top navigation tab.'],
+      ['Pick a mode','By file shows every dated artifact; By project shows each project’s daily commits in parallel columns. The choice is remembered.'],
+      ['Set a date','Drag the scrubber or press Play; the sweep line moves up the page as time advances.'],
+      ['Inspect a point','Hover an artifact or commit dot for details; click a commit dot to open its project on Graph.']
     ],
     checks:[
-      ['No dots','Artifacts require valid dates in the generated space payload.'],
-      ['Trace missing','Open the cluster from Graph first or clear the existing trace and try again.'],
-      ['No Six Degrees path','The two selected nodes are disconnected in the current graph dataset.'],
-      ['Top tab stays Timeline','That is intentional: Six Degrees is a Timeline tool, not a separate top-level tab.']
+      ['No dots','Dates come from git only: a dot is a file’s first-commit day. Files never committed, and projects without a repo, sit out the By file plot.'],
+      ['No By project toggle','The current dataset carries no git history; the toggle appears only when at least one project has git commits of its own (a repo with no commits yet does not count, and the Dashboard projection never has history).'],
+      ['Trace missing','Open the cluster from Graph first or clear the existing trace and try again.']
     ],
     note:'Timeline’s visual artifact map and .xo/timeline.jsonl answer different questions: the former maps the workspace; the latter is the watcher’s durable event history.'
   },
@@ -356,38 +350,6 @@ const TAB_GUIDES={
       ['Old activity.json','Legacy <project>/.xo/activity.json is ignored; current presence is in .quirq.']
     ],
     note:'The watcher owns .xo writes. Humans and agents should use documented APIs or native task tools rather than hand-editing these files.'
-  },
-  chat:{
-    tab:'chat',
-    name:'Chat',
-    kicker:'Tab guide · Agent conversations',
-    title:'Chat: run the active agent',
-    intro:'Chat starts or resumes Plane-B agent sessions, streams assistant output, associates new work with a selected XO project, and keeps stop control close to the running request.',
-    facts:['streaming SSE','new + resumed sessions','project-aware','abortable'],
-    jobs:[
-      ['Start a conversation','Choose a project and submit a prompt to the configured active backend.'],
-      ['Resume work','Search or select an existing session and load its message history.'],
-      ['Control a run','Watch streamed deltas and abort the active stream when needed.']
-    ],
-    sources:[
-      ['GET /api/sessions and /api/sessions/search','Lists searchable runtime sessions.','Native runtime projection'],
-      ['GET /api/messages/{id}','Loads message history for the selected native session.','Native runtime projection'],
-      ['POST /api/chat/prompt + GET /api/chat/stream/{id}','Starts work and streams session-created, text, tool, and completion events.','Active agent'],
-      ['GET /api/xo-projects','Supplies the project selector used for new work.','XO root']
-    ],
-    steps:[
-      ['Check Setup','Select an agent backend and provide its required credentials or native login.'],
-      ['Choose context','Pick a project or resume an existing session.'],
-      ['Send','Submit a prompt and watch the event stream.'],
-      ['Stop safely','Use Abort to terminate the active stream without inventing a new session.']
-    ],
-    checks:[
-      ['No response','Setup may show a missing CLI, token, or provider credential.'],
-      ['Session list empty','The active runtime may not have native sessions mounted.'],
-      ['Project mismatch','Start the session from the intended project; project mapping drives watcher outputs.'],
-      ['Stream interrupted','Reload the session list and inspect the session’s persisted message history.']
-    ],
-    note:'Chat messages remain in the runtime’s native store. The watcher derives compact project metadata; it does not copy full conversations into .xo.'
   },
   wiki:{
     tab:'wiki',
@@ -648,31 +610,34 @@ function installationArticle(){
   return`
     <article class="wiki-article">
       <header class="wiki-hero">
-        <div class="wiki-kicker">Start here · Docker installation</div>
-        <h1>Run Quirq locally with Docker</h1>
-        <p>Run one command, then open one URL. The launcher builds the image,
-        mounts durable host data, starts Docker in the background, and waits
-        until the API and Space UI are healthy.</p>
+        <div class="wiki-kicker">Start here · Native installation</div>
+        <h1>Run Quirq locally, no Docker</h1>
+        <p>Run one command from the directory you want as your workspace,
+        then open one URL. The installer clones Quirq beside your projects,
+        prepares a Python environment with uv, and runs the server in the
+        foreground.</p>
         <div class="wiki-facts">
-          <span>Docker only</span>
-          <span>no clone or checkout</span>
-          <span>fixed localhost:5003</span>
-          <span>host data persists</span>
+          <span>no Docker</span>
+          <span>no clone or checkout to manage</span>
+          <span>default localhost:5003</span>
+          <span>self-contained folder</span>
         </div>
       </header>
 
       <section class="wiki-section">
         <h2>Prerequisites</h2>
         <div class="wiki-check-grid">
-          <div><b>Docker</b><p>Docker Desktop or Docker Engine must be running.</p></div>
+          <div><b>git</b><p>Required. Quirq uses it to download itself, and
+          at runtime for project sync and history.</p></div>
           <div><b>curl</b><p>Used once to stream the small installer into
           your shell.</p></div>
           <div><b>A coding runtime</b><p>Claude Code, OpenClaw, Hermes, or
           Antigravity is needed only for chat. The API, Wiki, and project
           views start without one.</p></div>
-          <div><b>A projects directory</b><p>Defaults to
-          <code>~/xo-projects</code>. It contains individual project folders
-          and the workspace-level <code>.xo</code>.</p></div>
+          <div><b>Optional tools</b><p><code>node</code>/<code>npm</code>,
+          <code>gh</code>, <code>rclone</code>, and <code>gpg</code> each
+          unlock one feature. The startup readiness table names what a
+          missing tool costs; nothing is fatal.</p></div>
         </div>
       </section>
 
@@ -681,76 +646,84 @@ function installationArticle(){
         <ol class="wiki-steps">
           <li><b>Pick a workspace directory.</b>
           <p>Run the installer from the directory you want as your
-          workspace — the checkout lands beside your projects. Git is the
-          only prerequisite.</p></li>
+          workspace: the checkout lands beside your projects, and the
+          directory itself becomes your projects root.</p></li>
           <li><b>Run the installer.</b>
-          <code>curl -fsSL https://www.quirq.ai/install | sh</code>
-          <p>The command clones the server, prepares a Python environment,
-          starts the server in the background, waits for health, and prints
-          the browser URL.</p></li>
+          <code>curl -fsSL https://raw.githubusercontent.com/quirq-ai/xo-space/main/install.sh | bash</code>
+          <p>Pipe it to <code>bash</code>, not <code>sh</code>: the script
+          uses <code>BASH_SOURCE</code> and <code>pipefail</code>. It clones
+          the server, prepares the environment, starts the server in the
+          foreground, and prints the browser URL.</p></li>
           <li><b>Open the workspace.</b>
-          <code>http://localhost:5002/space/</code>
-          <p>The same address is used every time. Re-run the same installer
-          command whenever you want to update or restart.</p></li>
+          <code>http://localhost:5003/space/</code>
+          <p>Press Ctrl-C to stop the server. Re-run the same installer
+          command whenever you want to update and restart.</p></li>
         </ol>
       </section>
 
       <section class="wiki-section">
         <h2>What the one command does</h2>
         <div class="wiki-flow wiki-flow-five" aria-label="Local installation flow">
-          <div><small>01</small><b>Check Docker</b><span>Require a running
-          Docker engine.</span></div>
+          <div><small>01</small><b>Install uv</b><span>Install
+          <code>uv</code> if it is missing; nothing else is added to the
+          machine.</span></div>
           <i aria-hidden="true">→</i>
-          <div><small>02</small><b>Use port 5003</b><span>Publish container
-          port 5002 only on host loopback at localhost:5003.</span></div>
+          <div><small>02</small><b>Clone or update</b><span>Clone Quirq into
+          <code>./xo-space</code>; re-running fast-forwards the same
+          checkout, so this doubles as the update path.</span></div>
           <i aria-hidden="true">→</i>
-          <div><small>03</small><b>Pull the image</b><span>Download the
-          published amd64 or arm64 Quirq image from GHCR.</span></div>
+          <div><small>03</small><b>Build the venv</b><span>Create
+          <code>./xo-space/venv</code> with Python 3.12 and install
+          <code>requirements.txt</code>.</span></div>
           <i aria-hidden="true">→</i>
-          <div><small>04</small><b>Mount host data</b><span>Bind projects,
-          <code>~/.quirq</code>, and manifest-declared native runtime stores
-          to separate container paths.</span></div>
+          <div><small>04</small><b>Set the roots</b><span>Treat the launch
+          directory as the projects root and create <code>./.quirq</code>
+          for machine-local state.</span></div>
           <i aria-hidden="true">→</i>
-          <div><small>05</small><b>Wait for health</b><span>Run in the
-          background and return only when Quirq is ready.</span></div>
+          <div><small>05</small><b>Run foreground</b><span>Print the
+          readiness table and the URL, log to the state root, and stop on
+          Ctrl-C.</span></div>
         </div>
       </section>
 
       <section class="wiki-section">
-        <h2>Host ↔ container storage map</h2>
+        <h2>Local data map</h2>
         <div class="wiki-table-wrap">
           <table class="wiki-table">
-            <thead><tr><th>Host path</th><th>Container path</th><th>Purpose</th></tr></thead>
+            <thead><tr><th>Path</th><th>Purpose</th></tr></thead>
             <tbody>
-              <tr><td>$XO_PROJECTS_ROOT or ~/xo-projects</td><td>/workspace/xo-projects</td><td>Project files and watcher-owned portable .xo metadata</td></tr>
-              <tr><td>~/.quirq</td><td>/root/.quirq</td><td>Machine-local runtime configuration, credentials, onboarding, cursors, locks, and live presence</td></tr>
-              <tr><td>Manifest-declared agent directories</td><td>Matching paths under /root</td><td>Native login, configuration, and session records; the installer does not mount the rest of the home directory</td></tr>
+              <tr><td>.</td><td>Your projects root; each project is a subdirectory with its own portable .xo metadata</td></tr>
+              <tr><td>./xo-space</td><td>The Quirq source checkout the installer owns and updates</td></tr>
+              <tr><td>./xo-space/venv</td><td>The Python environment</td></tr>
+              <tr><td>./.quirq</td><td>Machine-local runtime configuration, credentials, watcher activity, cursors, locks, and live presence</td></tr>
             </tbody>
           </table>
         </div>
-        <p class="wiki-note">The API reports
-        <code>/workspace/xo-projects</code>. That is the correct container-side
-        path for the selected host project root.</p>
+        <p class="wiki-note">Everything lives under the directory you launched
+        from, so an install is self-contained: move or delete it as one
+        folder. The Setup tab can point Quirq at a different projects root or
+        state root later.</p>
       </section>
 
       <section class="wiki-section">
         <h2>One stable local address</h2>
         <div class="wiki-decision-list">
-          <div><b>Browser address</b><p>Always open
+          <div><b>Browser address</b><p>Open
           <code>http://localhost:5003/space/</code>.</p></div>
-          <div><b>Container address</b><p>The API still listens on port
-          <code>5002</code> inside Docker. Compose maps host 5003 to it.</p></div>
-          <div><b>Port 5002 is already busy</b><p>Nothing changes. Docker does
-          not publish or take over host port 5002.</p></div>
+          <div><b>Changing the port</b><p>Every value is overridable from the
+          environment, e.g. <code>PORT=8080</code> before the installer
+          command. First-run choices are recorded in the checkout's
+          <code>.env</code>.</p></div>
           <div><b>Port 5003 is already busy</b><p>Startup fails clearly so it
           never replaces or stops another local service.</p></div>
+          <div><b>Binding</b><p>The server listens on
+          <code>127.0.0.1</code> by default; override <code>HOST</code>
+          deliberately if you need more.</p></div>
         </div>
-        <p>Native contributor mode remains separate and can still resolve its
-        own development port.</p>
       </section>
 
       <section class="wiki-section">
-        <h2>Verify the running container</h2>
+        <h2>Verify the running server</h2>
         <div class="wiki-recipe">
           <div class="wiki-recipe-step"><small>1</small><b>Health</b>
           <code>curl http://127.0.0.1:5003/health</code>
@@ -759,8 +732,8 @@ function installationArticle(){
           <i>→</i>
           <div class="wiki-recipe-step"><small>2</small><b>XO root</b>
           <code>curl http://127.0.0.1:5003/api/config/workspace</code>
-          <p><code>roots[default]</code> should be
-          <code>/workspace/xo-projects</code>.</p></div>
+          <p><code>roots[default]</code> should be the directory you
+          launched the installer from.</p></div>
           <i>→</i>
           <div class="wiki-recipe-step"><small>3</small><b>Projects</b>
           <code>curl http://127.0.0.1:5003/api/xo-projects</code>
@@ -770,36 +743,41 @@ function installationArticle(){
 
       <section class="wiki-section wiki-grid">
         <div>
-          <h2>Stop and clean up</h2>
-          <code>docker stop quirq</code>
-          <p>This stops the installed container. Bind-mounted projects and
-          <code>~/.quirq</code> remain on the host.</p>
+          <h2>Stop, update, restart</h2>
+          <code>Ctrl-C</code>
+          <p>The server runs in the foreground; nothing supervises it, so
+          the Setup tab cannot restart it for you. Stop it with Ctrl-C and
+          re-run the installer command to update and restart. Projects and
+          <code>./.quirq</code> stay put.</p>
         </div>
         <div>
-          <h2>Native contributor mode</h2>
+          <h2>Contributor mode</h2>
           <code>./cowork-api.sh dev</code>
-          <p>This alternate path creates a host <code>venv</code>, installs
-          dependencies, enables reload, and uses the same port fallback.</p>
+          <p>From a checkout you manage yourself, this alternate path
+          creates a <code>venv</code>, installs dependencies, enables
+          reload, and uses the same port fallback. The installer never runs
+          git against a checkout you cloned by hand.</p>
         </div>
       </section>
 
       <section class="wiki-section">
         <h2>Coding-runtime boundary</h2>
-        <p>The image installs the API, not every agent CLI. Space, project
-        APIs, the Wiki, and watcher metadata work in Docker. CLI-backed chat
-        requires the runtime inside the container. An HTTP gateway running on
-        the host must be addressed through
-        <code>host.docker.internal</code>, not container loopback.</p>
-        <p>Host credential directories are deliberately not mounted by
-        default. Adding that access should be an explicit security decision,
-        not an installation side effect.</p>
+        <p>The installer sets up the API, not any agent CLI: it never runs
+        <code>apt-get</code>, pipes another installer to your shell, or
+        installs npm packages behind your back. Space, project APIs, the
+        Wiki, and watcher metadata all work without a CLI; chat needs one
+        you install yourself, e.g.
+        <code>npm install -g @anthropic-ai/claude-code</code>.</p>
+        <p>To opt back into the automatic bootstrap of apt packages, Node,
+        and the CLI, start with <code>QUIRQ_SKIP_BOOT_INSTALL=0</code>.</p>
       </section>
 
       <aside class="wiki-callout">
         <b>Versioned source document</b>
-        <p>The complete Docker workflow and troubleshooting guide is maintained
-        in <code>INSTALLATION.md</code>. The XO projects directory and
-        <code>~/.quirq</code> remain separate host mounts by design.</p>
+        <p>The complete installation and troubleshooting guide is maintained
+        in <code>INSTALLATION.md</code>, including configuration precedence,
+        root-nesting rules, and the Windows (WSL) note. The projects root
+        and the <code>.quirq</code> state root stay separate by design.</p>
       </aside>
     </article>`;
 }

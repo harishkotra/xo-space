@@ -4,17 +4,15 @@
 <style>html{color-scheme:dark}</style>
 </head><body>
 <link rel="stylesheet" href="css/base.css">
-<link rel="stylesheet" href="css/stage.css">
-<link rel="stylesheet" href="css/graph.css?v=20260726-environments1">
+<link rel="stylesheet" href="css/stage.css?v=20260813-wikisetup1">
+<link rel="stylesheet" href="css/graph.css?v=20260813-wikisetup1">
 <link rel="stylesheet" href="css/sessions.css?v=20260725-sessions2">
-<link rel="stylesheet" href="css/timeline.css">
-<link rel="stylesheet" href="css/sixdegrees.css">
-<link rel="stylesheet" href="css/chrome.css?v=20260725-secrets">
+<link rel="stylesheet" href="css/timeline.css?v=20260813-timeline2">
+<link rel="stylesheet" href="css/chrome.css?v=20260813-timeline2">
 <link rel="stylesheet" href="css/projects.css">
-<link rel="stylesheet" href="css/chat.css">
 <link rel="stylesheet" href="css/wiki.css?v=20260725-collaboration1">
 <link rel="stylesheet" href="css/quirq.css?v=20260725-quirq2">
-<link rel="stylesheet" href="css/secrets.css?v=20260725-roots1">
+<link rel="stylesheet" href="css/secrets.css?v=20260813-wikisetup1">
 
 <div class="topbar">
   <div class="brand">
@@ -49,16 +47,10 @@
 
 <main id="stage">
   <!-- GRAPH -->
-  <section class="view is-active intro-dim" id="view-graph">
+  <section class="view is-active" id="view-graph">
     <canvas id="gcanvas"></canvas>
     <div class="ov" id="chips"></div>
     <p class="ov" id="hint"><b>Click</b> a node to focus its neighbourhood &middot; <b>Double-click</b> a cluster to open or close it &middot; <b>Drag</b> to reposition &middot; <b>Scroll</b> to zoom</p>
-    <div class="ov" id="intro">
-      <div class="eyebrow">An interconnected workspace history</div>
-      <h1>Every artifact leaves a trail.</h1>
-      <p id="intro-p">Wander through the repos, papers, decks, and experiments that bind thirteen months of XO together, from the first commit to this morning.</p>
-      <button class="cta" id="intro-cta">Enter the space &rarr;</button>
-    </div>
     <div class="ov" id="legend"></div>
     <div class="ov" id="counts"></div>
     <div class="ov" id="crumb">
@@ -72,15 +64,15 @@
   <!-- TIMELINE -->
   <section class="view" id="view-time">
     <div class="thead">
-      <div>
-        <div class="atlas-lens-switch" aria-label="Timeline tools">
-          <button class="is-on" type="button" data-atlas-lens="time">Timeline</button>
-          <button type="button" data-atlas-lens="six">Six degrees</button>
-        </div>
-        <h2>Thirteen months, four departments.</h2>
+      <div class="tintro">
+        <h2>The workspace, over time.</h2>
         <div class="sub" id="tsub">Scrub through the workspace as it grew. Open any cluster from the graph to watch its run unfold here.</div>
       </div>
       <div class="grow"></div>
+      <div class="atlas-lens-switch tmode" id="tmode" aria-label="Timeline mode" hidden>
+        <button class="is-on" type="button" data-tmode="file">By file</button>
+        <button type="button" data-tmode="project">By project</button>
+      </div>
       <button class="ghost" id="tclear" hidden>Clear trace</button>
       <button id="tplay"><svg width="9" height="10" viewBox="0 0 9 10"><path d="M0 0L9 5L0 10Z" fill="#14100a"/></svg><span>Play</span></button>
       <div id="treadout">Jul 2026</div>
@@ -91,34 +83,6 @@
     </div>
     <div id="tmilestone"></div>
     <div id="tplot"></div>
-  </section>
-
-  <!-- SIX DEGREES -->
-  <section class="view" id="view-six">
-    <div class="sixwrap">
-      <div class="sixhead">
-        <div class="atlas-lens-switch" aria-label="Timeline tools">
-          <button type="button" data-atlas-lens="time">Timeline</button>
-          <button class="is-on" type="button" data-atlas-lens="six">Six degrees</button>
-        </div>
-        <h2>Six degrees of XO</h2>
-        <div class="sub">Two artifacts. The shortest chain of work that connects them.</div>
-      </div>
-      <div class="sixform">
-        <div class="sfield"><label for="six-a">From</label><input id="six-a" placeholder="e.g. music" autocomplete="off" spellcheck="false"><div class="ac" id="six-aac"></div></div>
-        <button id="sixswap" title="Swap">&#8645;</button>
-        <div class="sfield"><label for="six-b">To</label><input id="six-b" placeholder="e.g. XO Labs seed deck" autocomplete="off" spellcheck="false"><div class="ac" id="six-bac"></div></div>
-        <button id="sixgo">Connect</button>
-        <button id="sixrand">Surprise me</button>
-      </div>
-      <div id="sixerr"></div>
-      <div id="sixout">
-        <div class="sixempty" id="sixempty">
-          <div class="big">6&deg;</div>
-          <p>Every folder is a bridge. Pick two artifacts to reveal the route between them.</p>
-        </div>
-      </div>
-    </div>
   </section>
   <!-- SESSIONS (Argus telemetry dashboard; content rendered by the
        sessions-tab closure below, independent of boot()) -->
@@ -152,6 +116,6 @@
   <div class="meta" id="fmeta"></div>
 </footer>
 
-<script type="module" src="js/app.js?v=20260726-environments1"></script>
+<script type="module" src="js/app.js?v=20260813-wikisetup1"></script>
 
 </body></html>

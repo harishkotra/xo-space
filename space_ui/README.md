@@ -90,14 +90,22 @@ the registry keeps the tabs switchable regardless.
   "leaves":     [ { "id", "group", "shape", "tag", "label",
                     "date", "blurb", "path" } ],                // one per file
   "ties":       [ { "s", "t", "label" } ],      // derived cross-links (see below)
-  "milestones": [ { "d": "YYYY-MM-DD", "t": "caption" } ]       // first commits
+  "milestones": [ { "d": "YYYY-MM-DD", "t": "caption" } ],      // first commits
+  "gitHistory": { "p_<project>": [ { "d": "YYYY-MM-DD", "n": 3,
+                    "s": ["subject", "…"] } ] }  // commits/day per project (optional)
 }
 ```
 
+`gitHistory` feeds the Timeline's **By project** mode: one lane per project,
+one dot per commit day (`n` commits, up to 3 sampled subjects in `s`). The
+mode toggle only renders when at least one project carries history; the
+Dashboard projection and non-git projects have none.
+
 Shapes are semantic: `disc` = code, `ring` = document, `diamond` = everything
-else. Leaf `date` is the git first-added date when the project is a repo,
-else file mtime. Tree edges (leaf → cluster → project → root) are derived by
-the UI; only cross-ties are listed.
+else. Leaf `date` is the git first-added date, or `null` when git does not
+know the file (untracked, or a non-git project); undated leaves appear on the
+graph but sit out the timeline. Tree edges (leaf → cluster → project → root)
+are derived by the UI; only cross-ties are listed.
 
 Ties are derived facts, never editorial: files that repeatedly share commits
 ("changed together ×N", from the same git log that dates the leaves), docs

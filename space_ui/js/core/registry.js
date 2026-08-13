@@ -51,6 +51,10 @@ export async function switchTo(id){
   for(const w of views){
     document.getElementById('tab-'+w.id)?.classList.toggle('is-on',w.id===activeTab);
   }
+  /* The stage clips its stacked sections, but hidden overflow can still be
+     scrolled programmatically (e.g. by focus scrolls); pin it back. */
+  const stage=document.getElementById('stage');
+  if(stage){stage.scrollLeft=0;stage.scrollTop=0;}
   requestAnimationFrame(()=>{
     document.getElementById('tab-'+activeTab)?.scrollIntoView({
       block:'nearest',

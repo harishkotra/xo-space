@@ -15,6 +15,26 @@ class SpaceWikiTests(unittest.TestCase):
         self.assertIn("import wikiView from './views/wiki.js?v=", app)
         self.assertIn("registerView(wikiView);", app)
         self.assertIn('href="css/wiki.css?v=', index)
+        # The wiki has no top-level tab: it opens from the Setup header
+        # button, and Setup's tab stays lit while it is open.
+        wikijs = (
+            ROOT / "space_ui" / "js" / "views" / "wiki.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn("nav:false", wikijs)
+        self.assertIn("parent:'secrets'", wikijs)
+        secrets = (
+            ROOT / "space_ui" / "js" / "views" / "secrets.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn('id="setup-wiki"', secrets)
+        self.assertIn("switchTo('wiki')", secrets)
+        # The intro overlays are gone from Graph and Dashboard.
+        self.assertNotIn('id="intro"', index)
+        dashboard_builder = (
+            ROOT / "services" / "cowork_agent" / "visualizer"
+            / "categorized_graph.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("introTitle", dashboard_builder)
+        self.assertNotIn("Every project has a purpose", dashboard_builder)
 
     def test_secrets_view_is_registered_and_never_reveals_saved_values(self) -> None:
         app = (ROOT / "space_ui" / "js" / "app.js").read_text(encoding="utf-8")
@@ -38,7 +58,7 @@ class SpaceWikiTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("scrollIntoView", registry)
 
-    def test_quirq_view_and_timeline_child_are_registered(self) -> None:
+    def test_quirq_view_registered_and_six_degrees_removed(self) -> None:
         app = (ROOT / "space_ui" / "js" / "app.js").read_text(encoding="utf-8")
         index = (ROOT / "space_ui" / "index.html").read_text(encoding="utf-8")
         quirq = (
@@ -52,9 +72,11 @@ class SpaceWikiTests(unittest.TestCase):
         self.assertIn('href="css/quirq.css?v=', index)
         self.assertIn("id:'quirq'", quirq)
         self.assertIn("/api/quirq", quirq)
-        self.assertIn("data-atlas-lens=\"six\"", index)
-        self.assertIn("nav:false", atlas)
-        self.assertIn("parent:'time'", atlas)
+        # Six Degrees was removed: no child lens, no lens switch, no view.
+        self.assertNotIn("data-atlas-lens", index)
+        self.assertNotIn("view-six", index)
+        self.assertNotIn("SIX DEGREES", atlas)
+        self.assertNotIn("sixView", atlas)
 
     def test_wiki_documents_the_storage_boundary_and_flow_pages(self) -> None:
         wiki = (ROOT / "space_ui" / "js" / "views" / "wiki.js").read_text(
@@ -102,7 +124,7 @@ class SpaceWikiTests(unittest.TestCase):
         self.assertIn("support.google.com/docs/answer/190843", wiki)
         index = (ROOT / "space_ui" / "index.html").read_text(encoding="utf-8")
         self.assertIn("css/wiki.css?v=20260725-collaboration1", index)
-        self.assertIn("js/app.js?v=20260726-environments1", index)
+        self.assertIn("js/app.js?v=20260813-wikisetup1", index)
 
     def test_wiki_has_a_dedicated_guide_for_every_top_level_tab(self) -> None:
         wiki = (ROOT / "space_ui" / "js" / "views" / "wiki.js").read_text(
@@ -115,14 +137,18 @@ class SpaceWikiTests(unittest.TestCase):
             "tab-timeline",
             "tab-sessions",
             "tab-projects",
-            "tab-chat",
             "tab-wiki",
             "tab-quirq",
             "tab-setup",
         ):
             self.assertIn(f"id:'{page_id}'", wiki)
             self.assertIn(f"'{page_id}':", wiki)
-        self.assertIn("Six Degrees now lives inside this tab", wiki)
+        # Chat is hidden from the tab bar, so it gets no tab guide.
+        self.assertNotIn("id:'tab-chat'", wiki)
+        app = (ROOT / "space_ui" / "js" / "app.js").read_text(encoding="utf-8")
+        self.assertNotIn("registerView(chatView)", app)
+        self.assertIn("newest at the top", wiki)
+        self.assertNotIn("Six Degrees", wiki)
         self.assertIn("one page per tab", wiki)
         self.assertIn("space:wiki-page", wiki)
 

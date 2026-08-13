@@ -418,14 +418,6 @@ def build_categorized_graph() -> dict:
             "collectionLabel": "environments",
             "rootEdgeLabel": "an environment of this workspace",
             "hubLabel": "Environment",
-            "introEyebrow": "Five environments",
-            "introTitle": "Every project has a purpose.",
-            "intro": (
-                f"{project_count} project"
-                f"{'s' if project_count != 1 else ''}, one node each, gathered "
-                "into overlapping Engineering, Ops, Documentation, Research, "
-                "and Marketing environments."
-            ),
             "timelineTitle": "The workspace, by purpose, over time.",
             "timelineSub": (
                 "Scrub through the project map and trace an environment."

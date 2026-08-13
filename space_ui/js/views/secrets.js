@@ -26,14 +26,17 @@ let loading=false;
 
 export default {
   id:'secrets',label:'Setup',order:9,
-  async mount(el){
+  async mount(el,ctx){
     root=el;
+    switchTo=ctx.switchTo;
     renderShell();
     bindEvents();
     await loadAll();
   },
   show(){/* Preserve an in-progress credential while switching tabs. */}
 };
+
+let switchTo=()=>{}; /* ctx.switchTo, captured on mount (opens the wiki) */
 
 function renderShell(){
   root.innerHTML=
@@ -44,7 +47,10 @@ function renderShell(){
           +'<h1>Runtime setup</h1>'
           +'<p>Choose the active agent, connect its native session store, tune the watcher, and provide credentials from one place.</p>'
         +'</div>'
-        +'<button class="setup-refresh" id="setup-refresh" type="button">Refresh status</button>'
+        +'<div class="setup-hero-actions">'
+          +'<button class="setup-refresh" id="setup-wiki" type="button">Open the wiki</button>'
+          +'<button class="setup-refresh" id="setup-refresh" type="button">Refresh status</button>'
+        +'</div>'
       +'</header>'
       +'<div class="setup-alert" id="setup-alert">'
         +'<span aria-hidden="true">◆</span>'
@@ -153,6 +159,7 @@ function renderShell(){
 }
 
 function bindEvents(){
+  root.querySelector('#setup-wiki').addEventListener('click',()=>switchTo('wiki'));
   root.querySelector('#setup-refresh').addEventListener('click',loadAll);
   runtimeForm.addEventListener('submit',saveRuntime);
   root.querySelector('#roots-form').addEventListener('submit',saveRoots);

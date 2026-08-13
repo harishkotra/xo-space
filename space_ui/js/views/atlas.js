@@ -1,11 +1,11 @@
-/* The atlas views — Dashboard, Graph, Timeline, Six Degrees: lenses over one
-   selected graph dataset. Dashboard uses dashboard.json while Graph uses
-   space.json. They share the model, camera, selection state and
-   cross-view actions inside one boot() closure, so they live in one module
-   exporting three views (splitting them would force cross-imports, which the
-   view contract forbids). Cross-view jumps go through ctx.switchTo (`go`).
-   All graph content comes from ./data/space.json; nothing is embedded here —
-   the data lives on disk, next to this page. */
+/* The atlas views (Dashboard, Graph, Timeline): lenses over one selected
+   graph dataset. Dashboard uses dashboard.json while Graph uses space.json.
+   They share the model, camera, selection state and cross-view actions
+   inside one boot() closure, so they live in one module exporting three
+   views (splitting them would force cross-imports, which the view contract
+   forbids). Cross-view jumps go through ctx.switchTo (`go`). All graph
+   content comes from ./data/space.json; nothing is embedded here; the data
+   lives on disk, next to this page. */
 import {apiFetch} from '../core/api.js';
 import {toast} from '../core/ui.js';
 
@@ -91,11 +91,6 @@ export const dashboardView={
 };
 export const graphView=atlasView('graph','Graph',1,'graph','graph');
 export const timeView=atlasView('time','Timeline',2,'time');
-export const sixView={
-  ...atlasView('six','Six&nbsp;Degrees',3,'six'),
-  nav:false,
-  parent:'time'
-};
 
 function boot(DATA,DATA_SOURCE){
 /* ============================== MODEL FROM LOCAL DATA ==============================
@@ -136,11 +131,6 @@ const collectionLabel=DATA.meta.collectionLabel||'clusters';
 document.getElementById('q').placeholder=`Search ${LEAVES.length} ${noun}…`;
 document.getElementById('fmeta').textContent=
   `${LEAVES.length} ${noun} · ${GROUPS.length} ${collectionLabel} · ${EDGES.length} links · mapped ${DATA.meta.mappedOn} · data: ${DATA_SOURCE}`;
-const intro=document.getElementById('intro');
-if(DATA.meta.introEyebrow)intro.querySelector('.eyebrow').textContent=DATA.meta.introEyebrow;
-if(DATA.meta.introTitle)intro.querySelector('h1').textContent=DATA.meta.introTitle;
-document.getElementById('intro-p').textContent=DATA.meta.intro||
-  `Wander through ${LEAVES.length} artifacts across the XO workspace.`;
 if(DATA.meta.timelineTitle){
   document.querySelector('#view-time .thead h2').textContent=DATA.meta.timelineTitle;
 }
@@ -578,7 +568,6 @@ function pick(mx,my){
 }
 gcv.addEventListener('pointerdown',e=>{
   gcv.setPointerCapture(e.pointerId);
-  dismissIntro();
   downX=lastX=e.clientX;downY=lastY=e.clientY;moved=false;
   const n=pick(...evXY(e));
   if(n&&n.type!=='root'){drag=n;n.fx=n.x;n.fy=n.y;}
@@ -678,7 +667,7 @@ function toggleGroup(g){
   if(focusSet&&selId)focusSet=neighborhood(selId,focusDepth);
 }
 gcv.addEventListener('wheel',e=>{
-  e.preventDefault();dismissIntro();camAnim=null;
+  e.preventDefault();camAnim=null;
   const f=Math.exp(-e.deltaY*.0016);
   const nk=Math.max(.22,Math.min(5,cam.k*f));
   const [mx,my]=evXY(e);
@@ -688,13 +677,6 @@ gcv.addEventListener('wheel',e=>{
   cam.k=nk;
 },{passive:false});
 document.getElementById('crumb-clear').addEventListener('click',()=>{clearFocus();clearPath();});
-document.getElementById('intro-cta').addEventListener('click',dismissIntro);
-let introGone=false;
-function dismissIntro(){
-  if(introGone)return;introGone=true;
-  document.getElementById('intro').classList.add('is-gone');
-  document.getElementById('view-graph').classList.remove('intro-dim');
-}
 
 /* ============================== RE-ROOT ============================== */
 const rootdd=document.getElementById('rootdd');
@@ -796,13 +778,13 @@ function showHC(n,mx,my){
   let rows='';
   if(n.type==='leaf'){
     rows=`<dl>
-      <dt>Born</dt><dd>${fmtDate(n.date)}</dd>
+      ${n.date?`<dt>Born</dt><dd>${fmtDate(n.date)}</dd>`:''}
       <dt>Where</dt><dd class="mono">${esc(n.path)}</dd>
       <dt>Ties</dt><dd>${n.degree-1} connection${n.degree-1===1?'':'s'} · ${esc(byId.get(n.group).label)}</dd>
     </dl>`;
   }else if(n.type==='group'){
     const kids=LEAVES.filter(l=>belongsToCategory(l,n.cat));
-    const dates=kids.map(x=>x.date).sort();
+    const dates=kids.map(x=>x.date).filter(Boolean).sort();
     const span=dates.length
       ?`<dt>Span</dt><dd>${fmtMY(+new Date(dates[0]))} to ${fmtMY(+new Date(dates.at(-1)))}</dd>`
       :'';
@@ -819,6 +801,9 @@ function showHC(n,mx,my){
     </div>
     ${rows}
     <div class="foot">${n.type==='group'?'Click to focus · Double-click to open or close':'Click to focus · Double-click to expand'}</div>`;
+  placeHC(mx,my);
+}
+function placeHC(mx,my){
   hc.classList.add('is-on');
   const r=hc.getBoundingClientRect();
   let x=mx+18,y=my+18;
@@ -863,8 +848,6 @@ function openPanel(n){
     ${conns?`<div class="psec"><h4>Connections</h4>${conns}</div>`:''}
     <div class="pacts">
       ${n.type==='leaf'||n.type==='group'?`<button data-act="timeline">Show on timeline</button>`:''}
-      <button data-act="from">Path from here</button>
-      <button data-act="to">Path to here</button>
     </div>`;
   panel.classList.add('is-open');
   panel.dataset.id=n.id;
@@ -885,8 +868,6 @@ panel.addEventListener('click',e=>{
   if(!a)return;
   const n=byId.get(panel.dataset.id);
   if(a.dataset.act==='timeline'){traceOnTimeline(n);}
-  else if(a.dataset.act==='from'){document.getElementById('six-a').value=n.label;sixA=n;go('six');}
-  else if(a.dataset.act==='to'){document.getElementById('six-b').value=n.label;sixB=n;go('six');}
 });
 function ensureShown(n){
   if(n.type==='leaf'){
@@ -996,78 +977,183 @@ addEventListener('keydown',e=>{
 });
 
 /* ============================== TIMELINE ============================== */
-const T0=+new Date(DATA.timeline.start+'T00:00:00'),T1=+new Date(DATA.timeline.end+'T00:00:00');
+const T0G=+new Date(DATA.timeline.start+'T00:00:00'),T1G=+new Date(DATA.timeline.end+'T00:00:00');
+let T0=T0G,T1=T1G;
 const SVGNS='http://www.w3.org/2000/svg';
-let tNow=T1,tPlaying=false,tTrace=null;
+let tNow=T1G,tPlaying=false,tTrace=null;
 const tplot=document.getElementById('tplot');
 const tsvg=document.createElementNS(SVGNS,'svg');
 tplot.appendChild(tsvg);
 const MILES=DATA.milestones;
+/* Two modes over one axis: 'file' plots every dated artifact as a beeswarm;
+   'project' plots each project's git commit history in parallel lanes (one
+   dot per day, sized by commits). The mode survives reloads; the toggle only
+   appears when the dataset carries git history (the Dashboard projection
+   and static fallback files do not). */
+const GITHIST=DATA.gitHistory||{};
+const histLanes=Object.keys(CAT).filter(cat=>(GITHIST[cat]||[]).length);
+const hasHist=histLanes.length>0;
+const TMODE_KEY='space.timelineMode';
+let tMode='file';
+try{if(localStorage.getItem(TMODE_KEY)==='project'&&hasHist)tMode='project';}catch(_err){}
+let histDots=[];
+{
+  const tmodeEl=document.getElementById('tmode');
+  if(tmodeEl&&hasHist)tmodeEl.hidden=false;
+}
+document.querySelectorAll('#tmode [data-tmode]').forEach(button=>{
+  button.addEventListener('click',()=>setTMode(button.dataset.tmode));
+});
+function defaultSub(){
+  if(tMode==='project')return'Every project’s git history in parallel · newest at the top · dot size = commits that day.';
+  return DATA.meta.timelineSub||
+    'Scrub through the workspace as it grew, newest at the top. Open any cluster from the graph to watch its run unfold here.';
+}
+function syncTModeUI(){
+  document.querySelectorAll('#tmode [data-tmode]').forEach(button=>{
+    button.classList.toggle('is-on',button.dataset.tmode===tMode);
+  });
+  if(!tTrace)document.getElementById('tsub').textContent=defaultSub();
+}
+function setTMode(mode){
+  if(mode===tMode||(mode==='project'&&!hasHist))return;
+  tMode=mode;
+  try{localStorage.setItem(TMODE_KEY,mode);}catch(_err){}
+  hideHC();
+  if(mode==='project'&&tTrace)clearTrace(); /* traces are a By-file tool */
+  syncTModeUI();
+  buildTimeline();
+  if(tMode==='file'&&tTrace)drawTrace();
+}
+syncTModeUI();
+/* Each mode gets its own axis, spanning only what it actually plots: the
+   file plot spans the kept leaves' git dates, the project plot spans commit
+   history. One shared axis would leave Play sweeping months of empty space
+   whenever one mode's data starts far earlier than the other's. */
+function computeRange(){
+  const stamps=tMode==='project'
+    ?histLanes.flatMap(cat=>(GITHIST[cat]||[]).map(day=>+new Date(day.d+'T00:00:00')))
+    :LEAVES.filter(n=>n.date).map(n=>+new Date(n.date+'T00:00:00'));
+  if(!stamps.length){T0=T0G;T1=T1G;}
+  else{
+    const pad=86400000*7;
+    let lo=Infinity,hi=-Infinity;
+    for(const t of stamps){if(t<lo)lo=t;if(t>hi)hi=t;}
+    T0=lo-pad;T1=hi+pad;
+  }
+  tNow=Math.min(Math.max(tNow,T0),T1);
+  const ticks=document.querySelector('#view-time .ticks');
+  if(ticks){
+    const fmtTick=(t,withYear)=>new Date(t).toLocaleDateString('en-US',
+      withYear?{month:'short',year:'numeric'}:{month:'short'}).toUpperCase();
+    ticks.innerHTML=[0,.25,.5,.75,1].map((f,i)=>
+      `<span>${fmtTick(T0+f*(T1-T0),i===0||i===4)}</span>`).join('');
+  }
+}
 function buildTimeline(){
   const W=tplot.clientWidth,H=tplot.clientHeight;
   if(W<50||H<50)return;
+  computeRange();
   tsvg.setAttribute('viewBox',`0 0 ${W} ${H}`);
   tsvg.innerHTML='';
-  const M={t:26,r:20,b:24,l:96};
-  const xOf=t=>M.l+(t-T0)/(T1-T0)*(W-M.l-M.r);
-  const lanes=Object.keys(CAT);
-  const laneH=(H-M.t-M.b)/lanes.length;
-  /* lane bands + labels */
+  histDots=[];
+  /* Only lanes with something to plot: projects whose files are all undated
+     (nothing committed) would render as dead empty columns. */
+  const lanes=tMode==='project'?histLanes
+    :Object.keys(CAT).filter(cat=>LEAVES.some(n=>n.cat===cat&&n.date));
+  const colW=(W-64-16)/Math.max(1,lanes.length);
+  /* Time runs vertically: newest at the top, oldest at the bottom. Narrow
+     columns rotate their headers, which needs a taller top margin. */
+  const rotated=colW<64;
+  const M={t:rotated?76:34,r:16,b:18,l:64};
+  const yOf=t=>M.t+(T1-t)/(T1-T0)*(H-M.t-M.b);
+  /* column bands + headers */
   lanes.forEach((cat,i)=>{
-    const y=M.t+i*laneH;
+    const x=M.l+i*colW;
     const band=document.createElementNS(SVGNS,'rect');
-    band.setAttribute('x',M.l-8);band.setAttribute('y',y+3);
-    band.setAttribute('width',W-M.l-M.r+16);band.setAttribute('height',laneH-6);
+    band.setAttribute('x',x+2);band.setAttribute('y',M.t-6);
+    band.setAttribute('width',Math.max(2,colW-4));band.setAttribute('height',H-M.t-M.b+12);
     band.setAttribute('fill',hexA(CAT[cat].color,.04));band.setAttribute('rx',8);
     tsvg.appendChild(band);
+    const name=CAT[cat].name;
+    const label=name.length>18?name.slice(0,17)+'…':name;
     const lb=document.createElementNS(SVGNS,'text');
-    lb.setAttribute('x',M.l-16);lb.setAttribute('y',y+laneH/2+4);
-    lb.setAttribute('text-anchor','end');
-    lb.setAttribute('style',`font:italic 500 13px ${SERIF};fill:${hexA(CAT[cat].color,.95)}`);
-    lb.textContent=CAT[cat].name;
+    if(rotated){
+      const ax=x+colW/2+4,ay=M.t-10;
+      lb.setAttribute('x',ax);lb.setAttribute('y',ay);
+      lb.setAttribute('text-anchor','start');
+      lb.setAttribute('transform',`rotate(-40 ${ax} ${ay})`);
+      lb.setAttribute('style',`font:italic 500 10.5px ${SERIF};fill:${hexA(CAT[cat].color,.95)}`);
+    }else{
+      lb.setAttribute('x',x+colW/2);lb.setAttribute('y',M.t-14);
+      lb.setAttribute('text-anchor','middle');
+      lb.setAttribute('style',`font:italic 500 13px ${SERIF};fill:${hexA(CAT[cat].color,.95)}`);
+    }
+    lb.textContent=label;
     tsvg.appendChild(lb);
+    if(tMode==='project'){
+      const total=(GITHIST[cat]||[]).reduce((sum,day)=>sum+day.n,0);
+      const sub=document.createElementNS(SVGNS,'text');
+      sub.setAttribute('x',x+colW/2);sub.setAttribute('y',H-4);
+      sub.setAttribute('text-anchor','middle');
+      sub.setAttribute('style',`font:400 8.5px ${MONO};letter-spacing:.06em;fill:#56534b`);
+      sub.textContent=colW>=70?`${total} COMMIT${total===1?'':'S'}`:String(total);
+      tsvg.appendChild(sub);
+    }
   });
-  /* month grid */
-  let d=new Date(T0);
-  while(+d<T1){
-    const x=xOf(+d);
-    const ln=document.createElementNS(SVGNS,'line');
-    ln.setAttribute('x1',x);ln.setAttribute('x2',x);
-    ln.setAttribute('y1',M.t-4);ln.setAttribute('y2',H-M.b);
-    ln.setAttribute('stroke',d.getMonth()===0?'rgba(233,228,217,.13)':'rgba(233,228,217,.05)');
-    ln.setAttribute('stroke-dasharray','1 4');
-    tsvg.appendChild(ln);
-    const tx=document.createElementNS(SVGNS,'text');
-    tx.setAttribute('x',x);tx.setAttribute('y',M.t-10);
-    tx.setAttribute('text-anchor','middle');
-    tx.setAttribute('style',`font:400 8.5px ${MONO};letter-spacing:.08em;fill:#56534b`);
-    tx.textContent=d.toLocaleDateString('en-US',{month:'short'}).toUpperCase();
-    tsvg.appendChild(tx);
-    d=new Date(d.getFullYear(),d.getMonth()+1,1);
+  /* month grid: horizontal rules, labeled in the left margin */
+  {
+    const monthCount=Math.max(1,Math.round((T1-T0)/2592000000));
+    const labelEvery=monthCount>26?3:1;
+    let d=new Date(T0),mi=0;
+    while(+d<T1){
+      const y=yOf(+d);
+      const ln=document.createElementNS(SVGNS,'line');
+      ln.setAttribute('x1',M.l-6);ln.setAttribute('x2',W-M.r);
+      ln.setAttribute('y1',y);ln.setAttribute('y2',y);
+      ln.setAttribute('stroke',d.getMonth()===0?'rgba(233,228,217,.13)':'rgba(233,228,217,.05)');
+      ln.setAttribute('stroke-dasharray','1 4');
+      tsvg.appendChild(ln);
+      if(mi%labelEvery===0){
+        const tx=document.createElementNS(SVGNS,'text');
+        tx.setAttribute('x',M.l-12);tx.setAttribute('y',y+3);
+        tx.setAttribute('text-anchor','end');
+        tx.setAttribute('style',`font:400 8.5px ${MONO};letter-spacing:.08em;fill:#56534b`);
+        const opts=d.getMonth()===0?{month:'short',year:'2-digit'}:{month:'short'};
+        tx.textContent=d.toLocaleDateString('en-US',opts).toUpperCase();
+        tsvg.appendChild(tx);
+      }
+      mi++;
+      d=new Date(d.getFullYear(),d.getMonth()+1,1);
+    }
   }
-  /* milestone pips */
+  /* milestone pips: far-left margin, at their moment in time */
   MILES.forEach(m=>{
-    const x=xOf(+new Date(m.d+'T00:00:00'));
+    const t=+new Date(m.d+'T00:00:00');
+    if(t<T0||t>T1)return; /* outside this mode's axis */
+    const y=yOf(t);
     const c=document.createElementNS(SVGNS,'circle');
-    c.setAttribute('cx',x);c.setAttribute('cy',H-M.b+10);c.setAttribute('r',2.4);
+    c.setAttribute('cx',8);c.setAttribute('cy',y);c.setAttribute('r',2.4);
     c.setAttribute('fill','#3a4136');c.dataset.milestone='1';c.dataset.t=+new Date(m.d+'T00:00:00');
     tsvg.appendChild(c);
   });
-  /* beeswarm dots */
+  if(tMode==='file'){
+  /* beeswarm: the date sets the row (y); collisions fan sideways inside the
+     column, spilling downward (older) when a column is packed */
   lanes.forEach((cat,li)=>{
-    const ns=LEAVES.filter(n=>n.cat===cat).sort((a,b)=>a.date<b.date?-1:1);
+    const ns=LEAVES.filter(n=>n.cat===cat&&n.date).sort((a,b)=>a.date<b.date?-1:1);
     const placed=[];
-    const baseY=M.t+li*laneH+laneH/2;
-    const maxRow=Math.max(1,Math.floor((laneH/2-10)/13));
+    const baseX=M.l+li*colW+colW/2;
+    const maxRow=Math.max(1,Math.floor((colW/2-5)/9));
     ns.forEach(n=>{
-      n.tx=xOf(+new Date(n.date+'T00:00:00'));
-      const hit=r=>placed.some(p=>Math.abs(p.tx-n.tx)<14&&p.row===r);
+      n.ty=yOf(+new Date(n.date+'T00:00:00'));
+      const hit=r=>placed.some(p=>Math.abs(p.ty-n.ty)<12&&p.row===r);
       let row=0,guard=0;
       while(hit(row)&&guard++<200){
         row=row>0?-row:-row+1;
-        if(Math.abs(row)>maxRow){n.tx+=12;row=0;}
+        if(Math.abs(row)>maxRow){n.ty+=10;row=0;}
       }
-      n.row=row;n.ty=baseY+row*13;
+      n.row=row;n.tx=baseX+row*9;
       placed.push(n);
     });
   });
@@ -1075,6 +1161,7 @@ function buildTimeline(){
   dotsG.setAttribute('id','tdots');
   tsvg.appendChild(dotsG);
   LEAVES.forEach(n=>{
+    if(!n.date){n.tEl=null;return;} /* git-dated artifacts only */
     const col=CAT[n.cat].color;
     const r=3.2+Math.min(2.6,(n.degree-1)*.5);
     let el;
@@ -1099,24 +1186,52 @@ function buildTimeline(){
     dotsG.appendChild(el);
     n.tEl=el;
   });
-  /* trace layer + sweep */
+  /* trace layer */
   const traceG=document.createElementNS(SVGNS,'g');
   traceG.setAttribute('id','ttrace');
   tsvg.insertBefore(traceG,dotsG);
+  }else{
+  /* parallel git histories: one column per project, one dot per commit-day.
+     Radius grows with the square root of that day's commit count, capped so
+     tight column packing never bleeds across bands. */
+  lanes.forEach((cat,li)=>{
+    const baseX=M.l+li*colW+colW/2;
+    const col=CAT[cat].color;
+    const base=document.createElementNS(SVGNS,'line');
+    base.setAttribute('x1',baseX);base.setAttribute('x2',baseX);
+    base.setAttribute('y1',M.t-6);base.setAttribute('y2',H-M.b+6);
+    base.setAttribute('stroke',hexA(col,.18));base.setAttribute('stroke-width',1);
+    tsvg.appendChild(base);
+    (GITHIST[cat]||[]).forEach(day=>{
+      const t=+new Date(day.d+'T00:00:00');
+      const dot=document.createElementNS(SVGNS,'circle');
+      const r=Math.max(2,Math.min(colW*.42,2+Math.sqrt(day.n)*1.6));
+      dot.setAttribute('cx',baseX);dot.setAttribute('cy',yOf(t));
+      dot.setAttribute('r',r);dot.setAttribute('fill',col);
+      dot.dataset.hist=String(histDots.length);
+      dot.style.cursor='pointer';
+      tsvg.appendChild(dot);
+      histDots.push({el:dot,t,cat,day});
+    });
+  });
+  }
+  /* sweep: a horizontal rule at the scrubbed moment */
   const sweep=document.createElementNS(SVGNS,'line');
   sweep.setAttribute('id','tsweep');
-  sweep.setAttribute('y1',M.t-6);sweep.setAttribute('y2',H-M.b);
+  sweep.setAttribute('x1',M.l-6);sweep.setAttribute('x2',W-M.r);
   sweep.setAttribute('stroke',ACCENT);sweep.setAttribute('stroke-width',1.2);
   sweep.setAttribute('stroke-dasharray','2 4');sweep.setAttribute('opacity',.55);
   tsvg.appendChild(sweep);
-  tsvg._xOf=xOf;
+  tsvg._yOf=yOf;
   renderTimelineState();
 }
 function renderTimelineState(){
-  const xOf=tsvg._xOf;if(!xOf)return;
-  document.getElementById('tsweep')?.setAttribute('x1',xOf(tNow));
-  document.getElementById('tsweep')?.setAttribute('x2',xOf(tNow));
-  LEAVES.forEach(n=>{
+  const yOf=tsvg._yOf;if(!yOf)return;
+  document.getElementById('tsweep')?.setAttribute('y1',yOf(tNow));
+  document.getElementById('tsweep')?.setAttribute('y2',yOf(tNow));
+  if(tMode==='project'){
+    histDots.forEach(d=>d.el.setAttribute('opacity',d.t<=tNow?.85:.08));
+  }else LEAVES.forEach(n=>{
     if(!n.tEl)return;
     const born=+new Date(n.date+'T00:00:00')<=tNow;
     let op=born?.8:.06;
@@ -1138,14 +1253,15 @@ function renderTimelineState(){
   document.getElementById('tscrub').value=Math.round((tNow-T0)/(T1-T0)*1000);
 }
 function traceOnTimeline(n){
+  if(tMode!=='file')setTMode('file'); /* traces live on the By-file plot */
   const ids=n.type==='group'||n.type==='hub'
     ?LEAVES.filter(l=>belongsToCategory(l,n.cat)):[n];
-  const list=ids.slice().sort((a,b)=>a.date<b.date?-1:1);
+  const list=ids.filter(l=>l.date).sort((a,b)=>a.date<b.date?-1:1);
   tTrace={ids:new Set(list.map(x=>x.id)),list,label:n.label};
   go('time');
   requestAnimationFrame(()=>{
     if(!list.length){
-      document.getElementById('tsub').textContent=`${n.label} has no mapped ${noun}.`;
+      document.getElementById('tsub').textContent=`${n.label} has no git-dated ${noun} to trace.`;
       document.getElementById('tclear').hidden=false;
       return;
     }
@@ -1169,24 +1285,24 @@ function drawTrace(){
   let path=`M ${pts[0][0]} ${pts[0][1]}`;
   for(let i=1;i<pts.length;i++){
     const [x0,y0]=pts[i-1],[x1,y1]=pts[i];
-    const mx=(x0+x1)/2;
-    path+=` C ${mx} ${y0}, ${mx} ${y1}, ${x1} ${y1}`;
+    const my=(y0+y1)/2;
+    path+=` C ${x0} ${my}, ${x1} ${my}, ${x1} ${y1}`;
   }
   const p=document.createElementNS(SVGNS,'path');
   p.setAttribute('d',path);p.setAttribute('fill','none');
   p.setAttribute('stroke',ACCENT);p.setAttribute('stroke-width',1.3);p.setAttribute('opacity',.7);
   g.appendChild(p);
-  /* labels: alternate above/below, and step outward when several share an x window */
+  /* labels: alternate left/right, and step outward when several share a y window */
   const win=[];
   tTrace.list.forEach((n,i)=>{
-    const near=win.filter(w=>Math.abs(w-n.tx)<74).length;
-    win.push(n.tx);
-    const up=i%2===0;
+    const near=win.filter(w=>Math.abs(w-n.ty)<24).length;
+    win.push(n.ty);
+    const left=i%2===0;
     const step=Math.floor(near/2)*11;
     const t=document.createElementNS(SVGNS,'text');
-    t.setAttribute('x',n.tx);
-    t.setAttribute('y',up?n.ty-10-step:n.ty+16+step);
-    t.setAttribute('text-anchor','middle');
+    t.setAttribute('x',left?n.tx-10-step:n.tx+10+step);
+    t.setAttribute('y',n.ty+3);
+    t.setAttribute('text-anchor',left?'end':'start');
     t.setAttribute('style',`font:400 9.5px ${SERIF};fill:#b3ada0`);
     t.textContent=n.label;
     g.appendChild(t);
@@ -1196,8 +1312,7 @@ function drawTrace(){
 function clearTrace(){
   tTrace=null;
   document.getElementById('tclear').hidden=true;
-  document.getElementById('tsub').textContent=DATA.meta.timelineSub||
-    'Scrub through the workspace as it grew. Open any cluster from the graph to watch its run unfold here.';
+  document.getElementById('tsub').textContent=defaultSub();
   const g=tsvg.querySelector('#ttrace');if(g)g.innerHTML='';
   renderTimelineState();
 }
@@ -1228,9 +1343,24 @@ document.getElementById('tplay').addEventListener('click',()=>{
   if(tNow>=T1-3600000)tNow=T0;
   startPlay();
 });
+function showHistHC(d,mx,my){
+  if(!d)return;
+  const col=CAT[d.cat].color;
+  const subjects=(d.day.s||[]).map(s=>`<dt>·</dt><dd>${esc(s)}</dd>`).join('');
+  hc.innerHTML=`
+    <div class="art" style="background:linear-gradient(155deg, ${hexA(col,.24)}, ${hexA(col,.03)} 68%)">
+      <div class="kicker">${esc(CAT[d.cat].name)} · git</div>
+      <h5>${fmtDate(d.day.d)}</h5>
+      <div class="sub">${d.day.n} commit${d.day.n===1?'':'s'} this day</div>
+    </div>
+    ${subjects?`<dl>${subjects}</dl>`:''}
+    <div class="foot">Click to open this project on the graph</div>`;
+  placeHC(mx,my);
+}
 tsvg.addEventListener('pointermove',e=>{
   const t=e.target;
   if(t.dataset&&t.dataset.id){showHC(byId.get(t.dataset.id),e.clientX,e.clientY);}
+  else if(t.dataset&&t.dataset.hist){showHistHC(histDots[+t.dataset.hist],e.clientX,e.clientY);}
   else hideHC();
 });
 tsvg.addEventListener('pointerleave',hideHC);
@@ -1242,104 +1372,15 @@ tsvg.addEventListener('click',e=>{
     go(graphRoute);
     select(n.id,1);
     pulseN={id:n.id,t0:performance.now()};
+  }else if(t.dataset&&t.dataset.hist){
+    /* a commit dot names its project: jump to that hub on the graph */
+    const d=histDots[+t.dataset.hist];
+    if(!d||!byId.get(d.cat))return;
+    go(graphRoute);
+    select(d.cat,1);
+    pulseN={id:d.cat,t0:performance.now()};
   }
 });
-
-/* ============================== SIX DEGREES ============================== */
-let sixA=null,sixB=null,sixPath=null;
-wireAC(document.getElementById('six-a'),document.getElementById('six-aac'),n=>{sixA=n;});
-wireAC(document.getElementById('six-b'),document.getElementById('six-bac'),n=>{sixB=n;});
-const COST={x:1,rg:1.4,hg:2.4,root:4.5};
-function shortest(aId,bId){
-  const dist=new Map(),prev=new Map(),Q=new Set();
-  NODES.forEach(n=>{dist.set(n.id,1e9);Q.add(n.id);});
-  dist.set(aId,0);
-  while(Q.size){
-    let u=null,ud=1e9;
-    for(const id of Q){const dd=dist.get(id);if(dd<ud){ud=dd;u=id;}}
-    if(u===null||ud===1e9)break;
-    Q.delete(u);
-    if(u===bId)break;
-    for(const{e,other}of byId.get(u).adj){
-      if(!Q.has(other))continue;
-      const nd=ud+COST[e.kind];
-      if(nd<dist.get(other)){dist.set(other,nd);prev.set(other,{id:u,e});}
-    }
-  }
-  if(dist.get(bId)===1e9)return null;
-  const hops=[];let cur=bId;
-  while(cur!==aId){const p=prev.get(cur);hops.unshift({id:cur,e:p.e});cur=p.id;}
-  return[{id:aId,e:null},...hops];
-}
-function relText(e,fromId){
-  if(!e)return'';
-  if(e.kind==='x')return e.label;
-  if(e.kind==='root')return DATA.meta.rootEdgeLabel||'a department of XO';
-  const child=byId.get(e.t),parent=byId.get(e.s);
-  return fromId===child.id?`part of ${parent.label}`:`holds ${child.label}`;
-}
-function runSix(){
-  const err=document.getElementById('sixerr');
-  err.textContent='';
-  if(!sixA||!sixB){err.textContent=`Pick two ${noun} first.`;return;}
-  if(sixA.id===sixB.id){err.textContent=`That is the same ${noun.slice(0,-1)||noun}. Try two different names.`;return;}
-  sixPath=shortest(sixA.id,sixB.id);
-  if(!sixPath){err.textContent=`No route connects ${sixA.label} and ${sixB.label} in this space.`;return;}
-  const deg=sixPath.length-1;
-  const out=document.getElementById('sixout');
-  out.innerHTML=`
-    <div class="degline"><b>${deg}</b> degree${deg===1?'':'s'} of separation · ${esc(sixA.label)} to ${esc(sixB.label)}</div>
-    <div class="chain">${sixPath.map((h,i)=>{
-      const n=byId.get(h.id);
-      const col=n.cat?CAT[n.cat].color:'#e9e4d9';
-      const meta=n.type==='hub'?hubLabel.toLowerCase():n.type==='group'?'cluster':n.tag;
-      const card=`<div class="ncard" style="animation-delay:${i*130}ms">
-        <span class="cdot" style="background:${col}"></span>
-        <span class="nm">${esc(n.label)}</span><span class="meta">${esc(meta||'')}</span></div>`;
-      const link=h.e?`<div class="link" style="animation-delay:${(i-.5)*130}ms">
-        <span class="rule"></span><span class="rel">${esc(chainSentence(h.e))}</span></div>`:'';
-      return link+card;
-    }).join('')}</div>
-    <button id="sixtrace">Trace on the graph &rarr;</button>`;
-  document.getElementById('sixtrace').addEventListener('click',traceSixOnGraph);
-}
-function chainSentence(e){
-  const s=byId.get(e.s),t=byId.get(e.t);
-  if(e.kind==='x')return`${s.label} ${e.label} ${t.label}`;
-  if(e.kind==='root')return`${t.label} is ${DATA.meta.rootEdgeLabel||'a department of XO'}`;
-  return`${t.label} is part of ${s.label}`;
-}
-function traceSixOnGraph(){
-  if(!sixPath)return;
-  clearFocus();
-  pathIds=sixPath.map(h=>h.id);
-  pathEdges=sixPath.filter(h=>h.e).map(h=>h.e);
-  pathIds.forEach(id=>ensureShown(byId.get(id)));
-  reheat(.35);
-  go(graphRoute);
-  pathReveal=performance.now()+350;
-  setTimeout(()=>fitNodes(pathIds,240),380);
-}
-document.getElementById('sixgo').addEventListener('click',runSix);
-document.getElementById('sixswap').addEventListener('click',()=>{
-  [sixA,sixB]=[sixB,sixA];
-  const a=document.getElementById('six-a'),b=document.getElementById('six-b');
-  [a.value,b.value]=[b.value,a.value];
-});
-document.getElementById('sixrand').addEventListener('click',()=>{
-  let a,b,p,tries=0;
-  do{
-    a=LEAVES[Math.floor(Math.random()*LEAVES.length)];
-    b=LEAVES[Math.floor(Math.random()*LEAVES.length)];
-    p=a!==b?shortest(a.id,b.id):null;
-    tries++;
-  }while(tries<30&&(!p||p.length<5||a.cat===b.cat));
-  sixA=a;sixB=b;
-  document.getElementById('six-a').value=a.label;
-  document.getElementById('six-b').value=b.label;
-  runSix();
-});
-
 
 /* ============================== BOOT ============================== */
 function resize(){
@@ -1354,13 +1395,13 @@ addEventListener('resize',resize);
 resize();
 for(let i=0;i<260;i++)simTick();
 simAlpha=.35;
-/* initial camera: fit everything, biased right so the intro sits over calm space */
+/* initial camera: fit everything, centered */
 {
   let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
   shownNodes().forEach(n=>{x0=Math.min(x0,n.x);y0=Math.min(y0,n.y);x1=Math.max(x1,n.x);y1=Math.max(y1,n.y);});
   const k=Math.max(.3,Math.min(1.6,.94*Math.min(GW/(x1-x0+140),GH/(y1-y0+140))));
   cam.k=k;
-  cam.x=(x0+x1)/2-GW*.11/k;
+  cam.x=(x0+x1)/2;
   cam.y=(y0+y1)/2;
 }
 function frame(now){
