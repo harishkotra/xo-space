@@ -126,7 +126,7 @@ Every coding agent ships with its own session store, its own auth, its own todo 
 - 🧠 **Pluggable runtimes** — one `BaseAgentAdapter` contract, one `/api/chat/*` surface. Claude Code, OpenClaw, Hermes, and Antigravity ship full adapters (`services/cowork_agent/adapters/<name>/adapter.py`, auto-discovered — no registry dict to edit); Codex and Cursor ship telemetry-only capability modules, so they appear in Sessions but cannot serve chat. New runtimes plug in without router changes.
 - 🗂️ **Sharing-safe project model** — chat content stays in the runtime's own storage (`~/.claude/`, `~/.openclaw/`). Every direct subdirectory of the XO root is a project, and its **directory name is its id** — nothing in `.xo/` renames it. The XO root is `XO_PROJECTS_ROOT`: the directory you ran the installer from, `~/xo-projects` otherwise, repointable from the Setup tab. The folder itself is pure metadata + work files, structurally safe to share, fork, or rebase.
 - 📡 **SSE streaming with sane reconnects** — `event: text-delta` / `done` / `heartbeat` / `agent-error`, React-Strict-Mode-safe via a 600 s reconnect window, server-side single-flight on conflicts.
-- 🔌 **Connector hub** — Google Drive, OneDrive, GitHub (PAT + `gh` device flow), Vercel (OAuth 2.1 PKCE + Dynamic Client Registration), Manus. Each is dropped into `mcp-tokens.json` or `rclone.conf` and survives restarts.
+- 🔌 **Connector hub** — Google Drive, OneDrive, GitHub (PAT + `gh` device flow), Vercel (OAuth 2.1 PKCE + Dynamic Client Registration), Manus. Each is dropped into `token.json` or `rclone.conf` and survives restarts.
 - 🔐 **Clerk-backed identity** — browser poll-token flow with cowork-api as the trusted intermediary; tokens never reach the frontend.
 - 📈 **Unified usage** — `/api/usage` reads JSONL from every runtime, returns one normalised shape with tokens, cost, model breakdowns, and response-time percentiles.
 - 🛰️ **Local-first** — runs entirely on your machine. The only *unprompted* cloud call is to `xo-swarm-api` for identity verification and a daily usage sync (`services/usage_sync.py` → `POST ${CHAT_API_BASE_URL}/usage/report`). Everything else happens because you asked: a `git fetch` when Setup checks for an update, GitHub when you back a project up, whichever provider you connect. No telemetry, no exfiltration.
@@ -308,9 +308,9 @@ About 160 paths / 177 operations under the default `claude_code` runtime. 155 of
 |---|---|---|
 | **Google Drive** | `rclone authorize drive.file` + manual code paste; folder mgmt + 500 MiB streaming uploads | `rclone.conf` |
 | **OneDrive** | `rclone authorize` Microsoft Graph | `rclone.conf` |
-| **GitHub** | Personal Access Token paste **or** `gh auth login --web` device flow | `mcp-tokens.json` |
-| **Vercel** | API token paste **or** OAuth 2.1 PKCE (Dynamic Client Registration on first use) | `mcp-tokens.json` |
-| **Manus** | API key paste | `mcp-tokens.json` |
+| **GitHub** | Personal Access Token paste **or** `gh auth login --web` device flow | `token.json` |
+| **Vercel** | API token paste **or** OAuth 2.1 PKCE (Dynamic Client Registration on first use) | `token.json` |
+| **Manus** | API key paste | `token.json` |
 
 The three token connectors (GitHub, Vercel, Manus) share one shape: `POST /api/connectors/{svc}/token`, `GET .../status`, `POST .../disconnect`, `POST .../reconnect`. The two rclone connectors (Drive, OneDrive) are remote-scoped instead — `GET|POST /api/connectors/{svc}/remotes`, `DELETE .../remotes/{name}`, and an OAuth session trio: `GET .../sessions/{id}` to poll, `POST .../sessions/{id}/submit` to paste the code, `POST .../sessions/{id}/cancel`. Per-service extras: `/oauth/{start,exchange}` for Vercel, which also owns the top-level `GET /callback` and `GET|OPTIONS /.well-known/oauth-protected-resource`; `/cli/{start,poll,cancel}` for the GitHub device flow. Drive alone adds folder management (`POST .../remotes/{name}/mkdir`, `GET .../remotes/{name}/folders`, `POST .../remotes/{name}/rmdir`) and `POST .../remotes/{name}/upload`, which pipes the request body straight into rclone — no disk spool, no RAM buffer — up to a 500 MiB cap.
 
