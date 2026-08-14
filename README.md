@@ -309,7 +309,7 @@ About 160 paths / 177 operations under the default `claude_code` runtime. 155 of
 | **Google Drive** | `rclone authorize drive.file` + manual code paste; folder mgmt + 500 MiB streaming uploads | `rclone.conf` |
 | **OneDrive** | `rclone authorize` Microsoft Graph | `rclone.conf` |
 | **GitHub** | Personal Access Token paste **or** `gh auth login --web` device flow | `token.json` |
-| **Vercel** | API token paste **or** OAuth 2.1 PKCE (Dynamic Client Registration on first use) | `token.json` |
+| **Vercel** | API token paste **or** Sign in with Vercel (OAuth 2.1 + PKCE; dynamic client registration on first use, loopback callback, paste-the-URL finish on remote hosts) | `token.json` |
 | **Manus** | API key paste | `token.json` |
 
 The three token connectors (GitHub, Vercel, Manus) share one shape: `POST /api/connectors/{svc}/token`, `GET .../status`, `POST .../disconnect`, `POST .../reconnect`. The two rclone connectors (Drive, OneDrive) are remote-scoped instead — `GET|POST /api/connectors/{svc}/remotes`, `DELETE .../remotes/{name}`, and an OAuth session trio: `GET .../sessions/{id}` to poll, `POST .../sessions/{id}/submit` to paste the code, `POST .../sessions/{id}/cancel`. Per-service extras: `/oauth/{start,exchange}` for Vercel, which also owns the top-level `GET /callback` and `GET|OPTIONS /.well-known/oauth-protected-resource`; `/cli/{start,poll,cancel}` for the GitHub device flow. Drive alone adds folder management (`POST .../remotes/{name}/mkdir`, `GET .../remotes/{name}/folders`, `POST .../remotes/{name}/rmdir`) and `POST .../remotes/{name}/upload`, which pipes the request body straight into rclone — no disk spool, no RAM buffer — up to a 500 MiB cap.
