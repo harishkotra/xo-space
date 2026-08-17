@@ -48,6 +48,12 @@ const PAGES=[
     summary:'Google Docs-style live editing, durable versions, restore, audit, permissions, and safe data boundaries.'
   },
   {
+    id:'spacewalk',
+    section:'Design guide',
+    title:'Space Walk session replay',
+    summary:'Session traces, the repository citymap, the two 3D scenes, the optional judge, and quirq recipes.'
+  },
+  {
     id:'tab-dashboard',
     section:'Tab guides',
     title:'Dashboard tab',
@@ -57,7 +63,7 @@ const PAGES=[
     id:'tab-files',
     section:'Tab guides',
     title:'Files tab',
-    summary:'One home for the workspace: the operational project List first, the relationship Graph a lens switch away.'
+    summary:'One home for the workspace: List for ops and browsing, Graph for relationships, Tree for hierarchy — three lenses, one tab.'
   },
   {
     id:'tab-timeline',
@@ -80,8 +86,8 @@ const PAGES=[
   {
     id:'tab-quirq',
     section:'Tab guides',
-    title:'Quirq tab',
-    summary:'Compare machine-local watcher state with portable project .xo outputs.'
+    title:'Quirq state view',
+    summary:'Opened from Setup: compare machine-local watcher state with portable project .xo outputs.'
   },
   {
     id:'tab-setup',
@@ -99,6 +105,7 @@ const ARTICLES={
   'quirq-data':quirqDataArticle,
   flows:flowsArticle,
   collaboration:collaborationArticle,
+  spacewalk:spaceWalkArticle,
   'tab-dashboard':()=>tabGuideArticle('dashboard'),
   'tab-files':()=>tabGuideArticle('files'),
   'tab-timeline':()=>tabGuideArticle('timeline'),
@@ -117,10 +124,10 @@ let activePage='storage';
 let go=()=>{};
 
 export default {
-  /* No top-level tab: the wiki opens from the button in Setup's header
-     (and stays deep-linkable at #/wiki); Setup's tab lights up while the
-     wiki is open. */
-  id:'wiki',label:'Wiki',order:7,nav:false,parent:'secrets',
+  /* Top-level tab, and still deep-linkable at #/wiki. Order 7 keeps it
+     between Sessions and Setup — the nav slot (and number hotkey) Quirq
+     used to hold. */
+  id:'wiki',label:'Wiki',order:7,
   async mount(el,ctx){
     root=el;
     go=ctx.switchTo;
@@ -219,37 +226,43 @@ const TAB_GUIDES={
     tab:'projects',
     name:'Files',
     kicker:'Tab guide · Workspace map and project state',
-    title:'Files: one home, two lenses',
-    intro:'Files combines the former Projects and Graph tabs behind one List | Graph switch. It lands on the List lens: every project operationally, with per-project todos, open sessions, and recent events. The Graph lens maps the same workspace as projects, clusters, artifacts, and cross-links. Both lenses are read-only.',
-    facts:['lands on List','List | Graph lens switch','live generated map','portable .xo history','live .quirq presence','read-only'],
+    title:'Files: one home, three lenses',
+    intro:'Files is one top-level tab with three lenses behind a List | Graph | Tree pill. It lands on List: every project operationally, with a per-project drawer that browses the filesystem folder-by-folder and shows todos, open sessions, and recent events. Graph maps the same workspace as projects, clusters, artifacts, and cross-links. Tree reads the same space.json dataset as a horizontal hierarchy — folders as columns, files stacked beside their parent. All three lenses are read-only.',
+    facts:['lands on List','List | Graph | Tree lens switch','live generated map','drawer file explorer','portable .xo history','live .quirq presence','read-only'],
     jobs:[
-      ['Find an artifact','In the Graph lens, search by title, tag, project, or cluster and fly directly to the matching node.'],
-      ['Understand relationships','Select a node to inspect its neighborhood and follow parent, cluster, and cross-project ties.'],
+      ['Find an artifact','In Graph, search by title, tag, project, or cluster and fly to the matching node. In Tree, expand folders and filter by name; click a file to hand off to Graph focused on that leaf.'],
+      ['Understand relationships','Select a Graph node to inspect its neighborhood and follow parent, cluster, and cross-project ties.'],
+      ['Read the hierarchy','Use Tree when the question is “what is in there”: workspace root on the left, one column per depth, files stacked beside their folder (not one column per file).'],
       ['Change perspective','Use Graph root to temporarily reorganize the layout around any node without changing the XO filesystem.'],
-      ['Review active work','In the List lens, open a project drawer to inspect todos, current sessions, and the latest normalized timeline events.'],
-      ['Jump between lenses','Use a List row’s Map action to focus that project on the Graph; use “Show on timeline” from the Graph to carry a run into Timeline.']
+      ['Browse project files','In List, open a project drawer: the Files panel lists one folder at a time via GET /api/xo-projects/{id}/tree, with breadcrumbs and separate folder/file panes.'],
+      ['Review active work','In the same drawer, inspect todos, current sessions, and the latest normalized timeline events.'],
+      ['Jump between lenses','Use a List row’s Map action (or a Tree file row) to focus that project or file on Graph; use “Show on timeline” from Graph to carry a run into Timeline.']
     ],
     sources:[
-      ['GET /space/data/space.json','Generated by build_space_data() from the XO projects root and portable project metadata; feeds the Graph lens.','Live primary source'],
-      ['<XO root>/<project>/.xo/project.json','Gates project discovery and supplies each project’s display name and description; dates, git history, and cross-ties come from the project’s git log, not from .xo session data.','Portable project identity'],
-      ['GET /api/xo-projects (+ /todos, /timeline, /activity per project)','Feeds the List lens: identity, portable todos and history, and machine-local live presence. Each drawer panel fetches independently.','List lens data'],
+      ['GET /space/data/space.json','Generated by build_space_data() from the XO projects root and portable project metadata; feeds Graph and Tree.','Live primary source'],
+      ['<XO root>/<project>/.xo/project.json','Gates project discovery and supplies each project’s display name and description. The folder name under the XO root is the project id — a stale name inside this file never overrides it. Dates, git history, and cross-ties come from the project’s git log, not from .xo session data.','Portable project identity'],
+      ['GET /api/xo-projects','Feeds the List lens identity row for every direct child of the XO root.','List lens catalog'],
+      ['GET /api/xo-projects/{id}/tree?relative_path=…','Bounded, path-safe folder listing for the List drawer’s Files panel (dirs, files, sizes, mtimes).','List drawer explorer'],
+      ['GET /api/xo-projects/{id}/todos|activity|timeline','Portable todos, machine-local live presence, and recent normalized events. Each drawer panel fetches independently.','List drawer panels'],
       ['<SPACE_DIR>/data/space.json','Optional static fallback consulted only when live generation fails; no file is bundled, so a builder failure normally returns 503 and the no-data card.','Optional fallback']
     ],
     steps:[
-      ['Pick a lens','Files opens in the List; switch with the List | Graph pill at the top left. #/projects and #/graph deep-link each lens directly.'],
-      ['Search','Press / or use the top-right search field (Graph lens).'],
-      ['Focus','Click a node; double-click clusters to expand or collapse them.'],
-      ['Expand one row','In the List lens each drawer loads independently, so one failed data source does not hide the others.'],
+      ['Pick a lens','Files opens in List; switch with the List | Graph | Tree pill. #/projects, #/graph, and #/tree deep-link each lens.'],
+      ['Search','Press / or use Graph’s top-right search; Tree has its own name filter in the header.'],
+      ['Focus','Click a Graph node; double-click clusters to expand or collapse. In Tree, click folders to expand columns; click a file to jump to Graph.'],
+      ['Expand one row','In List each drawer panel loads independently, so one failed data source does not hide the others.'],
+      ['Browse files','In the Files panel, use breadcrumbs and folder rows to change cwd; browsing state is remembered per project for the session.'],
       ['Follow time','Choose “Show on timeline” to carry the selected run into Timeline.']
     ],
     checks:[
-      ['Empty graph','Confirm the XO root in Setup and verify GET /space/data/space.json.'],
+      ['Empty graph or tree','Confirm the XO root in Setup and verify GET /space/data/space.json.'],
       ['Project missing from the List','Verify the XO root and ensure the folder is a direct child of it.'],
       ['Unscaffolded badge','The folder exists but lacks canonical project metadata.'],
       ['No open sessions','This is a valid live-presence zero, not proof that no historical work exists.'],
       ['Unexpected root label','Graph root is an in-view lens, not the host XO directory configured in Setup.'],
-      ['Stale result','The generated graph payload is cached for up to 30 seconds; the List refetches on Refresh.'],
-      ['No List | Graph pill on Dashboard','Intentional: Dashboard shares the canvas but is its own tab, not a Files lens.']
+      ['Stale result','The generated graph/tree payload is cached for up to 30 seconds; List Refresh re-fetches the project catalog and open drawers.'],
+      ['Tree shows fewer columns than expected','Intentional: files stack beside their folder so horizontal distance means depth only.'],
+      ['No List | Graph | Tree pill on Dashboard','Intentional: Dashboard shares the canvas but is its own tab, not a Files lens.']
     ],
     note:'Files reads derived metadata and project structure. It never writes project files, .xo, or .quirq; the watcher owns .xo writes.'
   },
@@ -277,6 +290,7 @@ const TAB_GUIDES={
     ],
     checks:[
       ['No dots','Dates come from git only: a dot is a file’s first-commit day. Files never committed, and projects without a repo, sit out the By file plot.'],
+      ['Fewer projects than Files lists','Expected, and stated in the subtitle: Files lists every folder under the XO root, while both Timeline modes can only plot projects that have their own git repository. A project whose repo sits in a subfolder counts as having none.'],
       ['No By project toggle','The current dataset carries no git history; the toggle appears only when at least one project has git commits of its own (a repo with no commits yet does not count, and the Dashboard projection never has history).'],
       ['Trace missing','Open the cluster from Graph first or clear the existing trace and try again.']
     ],
@@ -317,14 +331,14 @@ const TAB_GUIDES={
       ['Prompts unavailable','That runtime may not support prompt details, or its native transcript may have been cleaned up.'],
       ['New session missing','Wait for ingestion and the short server cache, then refresh.']
     ],
-    note:'Sessions reads native runtime stores without modifying them. Projects remains the better tab for todos, live presence, and normalized .xo/.quirq history.'
+    note:'Sessions reads native runtime stores without modifying them. Files remains the better tab for todos, live presence, and normalized .xo/.quirq history.'
   },
   wiki:{
     tab:'wiki',
     name:'Wiki',
     kicker:'Tab guide · Local documentation',
     title:'Wiki: the operating manual',
-    intro:'Wiki ships with the application and documents the exact storage, watcher, installation, flow, and tab contracts for this version. It works offline and requires no external documentation service. It is not a top-level tab: open it with the Open the wiki button in Setup’s header, or deep-link to #/wiki; the Setup tab stays highlighted while it is open.',
+    intro:'Wiki ships with the application and documents the exact storage, watcher, installation, flow, and tab contracts for this version. It works offline and requires no external documentation service. It is a top-level tab, between Sessions and Setup, and stays deep-linkable at #/wiki.',
     facts:['versioned with code','offline','architecture + operations','one page per tab'],
     jobs:[
       ['Learn the boundaries','Start with Storage & data map before designing a new flow.'],
@@ -353,9 +367,9 @@ const TAB_GUIDES={
   quirq:{
     tab:'quirq',
     name:'Quirq',
-    kicker:'Tab guide · Watcher storage',
+    kicker:'View guide · Watcher storage',
     title:'Quirq: see both watcher destinations',
-    intro:'Quirq is a privacy-aware operational map. It explicitly separates machine-local watcher state under .quirq from portable derived metadata under each XO project’s .xo directory.',
+    intro:'Quirq is a privacy-aware operational map. It explicitly separates machine-local watcher state under .quirq from portable derived metadata under each XO project’s .xo directory. It is not a top-level tab: open it with the Open Quirq state button in Setup’s header, or deep-link to #/quirq; the Setup tab stays highlighted while it is open.',
     facts:['two storage destinations','live refresh','values masked','filesystem structure only'],
     jobs:[
       ['See local control state','Inspect cursors, locks, and live activity under .quirq/watcher.'],
@@ -369,9 +383,10 @@ const TAB_GUIDES={
       ['<XO root>/.xo/','Workspace aggregates rebuilt from project-level .xo files.','Durable workspace rollup']
     ],
     steps:[
+      ['Open Quirq','Use the Open Quirq state button in Setup’s header, or go straight to #/quirq.'],
       ['Read the split map','Compare the blue machine-local side with the green portable project side.'],
       ['Check freshness','Use updated times and watcher status before treating a snapshot as current.'],
-      ['Open project data','Jump to Projects for API-rendered todos, presence, and recent events.'],
+      ['Open project data','Jump to Files for API-rendered todos, presence, and recent events.'],
       ['Inspect structure','Use State tree for current .quirq files; contents remain protected.']
     ],
     checks:[
@@ -380,7 +395,7 @@ const TAB_GUIDES={
       ['No offsets.json','Some sources use other cursor types, or no supported records have been tailed yet.'],
       ['Credential count only','Values are deliberately write-only and remain masked.']
     ],
-    note:'Use Quirq to understand where data lives. Use Projects to consume project state and Setup to change runtime behavior.'
+    note:'Use Quirq to understand where data lives. Use Files to consume project state and Setup to change runtime behavior.'
   },
   setup:{
     tab:'secrets',
@@ -398,18 +413,19 @@ const TAB_GUIDES={
     sources:[
       ['GET /space/update/status + POST /space/update/apply','Compares HEAD with the checkout’s own remote via git and fast-forwards on request; refuses dirty or diverged checkouts.','Self-update'],
       ['GET/PUT /api/runtime-config','Reads and validates agent and watcher settings in .quirq/runtime.env.','Non-secret configuration'],
-      ['PUT /api/runtime-config/roots','Writes desired host roots to .quirq/roots.env.','Installer configuration'],
+      ['PUT /api/runtime-config/roots','Writes the desired host roots to .quirq/roots.env, which the server reads at startup; an exported shell or container value still outranks it.','Storage root configuration'],
       ['GET/PATCH/DELETE /api/secrets','Returns names/status and writes values to .quirq/secrets.env.','Write-only credentials'],
       ['POST /api/runtime-config/restart','Restarts only an installer-managed local container.','Managed process control']
     ],
     steps:[
       ['Confirm paths','Compare the configured roots with what the running server reports.'],
-      ['Save roots','If roots differ, copy and run the one-command installer — roots are applied when the server starts.'],
+      ['Inspect stored state','The header’s Open Quirq state button opens the machine-local watcher state beside the portable .xo output.'],
+      ['Save roots','Saved roots are applied at startup: restart the server, or run the one-command installer on a managed container, which also remaps its bind mounts.'],
       ['Save runtime','Review the pending-restart banner before applying process-time changes.'],
       ['Add credentials','Choose a manifest-recommended key, save it, then restart when requested.']
     ],
     checks:[
-      ['Root not applied','Saving queues it; rerun the displayed installer to restart with the new roots.'],
+      ['Root not applied','Saving only queues it. Restart the server (or rerun the displayed installer) to boot on the new roots; every tab then reads the same XO root.'],
       ['CLI unavailable','A manifest may support bootstrap, but required credentials must be present first.'],
       ['Sessions missing','Confirm the native runtime directory is mounted and watcher coverage includes it.'],
       ['Secret value hidden','That is intentional; replace the value or remove the variable.']
@@ -1031,7 +1047,7 @@ function quirqDataArticle(){
         <pre class="wiki-tree">~/.quirq/
 ├── state.json
 ├── runtime.env                 # mode 0600; typed restart-time controls
-├── roots.env                   # mode 0600; roots applied by the next installer run
+├── roots.env                   # mode 0600; storage roots, read at server startup
 ├── quirq.log                   # server output appended by the installer's run loop
 ├── secrets.env                 # mode 0600; write-only credentials from Setup
 └── watcher/
@@ -1058,13 +1074,17 @@ function quirqDataArticle(){
           </article>
 
           <article class="wiki-file">
-            <header><code>roots.env</code><span>installer root configuration</span></header>
+            <header><code>roots.env</code><span>storage root configuration</span></header>
             <p>Stores the absolute host paths selected for the XO projects
-            root and machine-local Quirq state root. These values are
-            intentionally separate from process runtime settings: the running
-            server cannot change its own roots, so Setup marks them pending
-            until the one-command installer restarts it with the new
-            values.</p>
+            root and machine-local Quirq state root. The server reads this
+            file at startup, before runtime.env, so the XO root saved in
+            Setup becomes the one root every tab resolves through
+            <code>project_layout.xo_projects_root()</code>. A value exported
+            by the shell or the container still outranks it. Roots are
+            import-time state: the running server cannot change its own, so
+            Setup marks a saved change pending until a restart (on a managed
+            container, the one-command installer, which also remaps the bind
+            mounts).</p>
             <dl><div><dt>Writer</dt><dd>typed root configuration API</dd></div><div><dt>Migration</dt><dd>empty state targets receive a copy; project roots are selected, never moved</dd></div></dl>
           </article>
 
@@ -1766,6 +1786,520 @@ function flowsArticle(){
         update time, confirm runtime coverage, compare project and workspace
         scope, then inspect server watcher logs. Filesystem inspection is a
         diagnostic last step, not an application integration.</p>
+      </aside>
+    </article>`;
+}
+
+function spaceWalkArticle(){
+  return`
+    <article class="wiki-article">
+      <header class="wiki-hero">
+        <div class="wiki-kicker">Design guide · Session replay</div>
+        <h1>Sessions replayed as light</h1>
+        <p>Space Walk is XO Labs’ fork of mindwalk. One Go binary reads
+        Claude Code, Codex, and pi session logs, normalizes each into a
+        replayable trace, and plays it back as light moving over a 3D map of
+        the repository: where the agent searched, read, and edited, the map
+        glows — everything else stays dark. Replay is entirely local: no
+        service, no account, no telemetry. The one exception is the optional
+        judge — when you run it, a summary of that session (task wording, file
+        paths, event digests) goes to the model behind your own
+        <code>claude</code> or <code>codex</code> CLI, and spends real tokens
+        against that provider.</p>
+        <div class="wiki-facts">
+          <span>fork of mindwalk</span>
+          <span>light is data</span>
+          <span>three harness adapters</span>
+          <span>loopback-only server</span>
+        </div>
+      </header>
+
+      <section class="wiki-section">
+        <h2>From session log to moving light</h2>
+        <div class="wiki-flow wiki-flow-five" aria-label="Space Walk data path">
+          <div><small>01</small><b>Session logs</b><span>Native JSONL stays where the runtime wrote it: ~/.claude/projects, ~/.codex/sessions, ~/.pi/agent/sessions.</span></div>
+          <i aria-hidden="true">→</i>
+          <div><small>02</small><b>Harness adapters</b><span>claude-code, codex, and pi adapters are tried in that order and recognize a file by its content, not its name — listing still filters to .jsonl, and claude-code skips agent-*.jsonl sidecars.</span></div>
+          <i aria-hidden="true">→</i>
+          <div><small>03</small><b>Normalized trace</b><span>One schema for every harness: events, targets with touch states, timeline marks, derived stats.</span></div>
+          <i aria-hidden="true">→</i>
+          <div><small>04</small><b>Citymap builder</b><span>A deterministic treemap of the repository, computed server-side as 2D footprints only.</span></div>
+          <i aria-hidden="true">→</i>
+          <div><small>05</small><b>Server + UI</b><span>A 127.0.0.1-only Go server with the React/Three.js frontend embedded in the binary.</span></div>
+        </div>
+      </section>
+
+      <section class="wiki-section">
+        <h2>One trace, whatever the harness</h2>
+        <p>Every adapter implements the same five-method
+        <code>adapter.Source</code> interface — Harness, SessionDir,
+        ListSessions, Summarize, Parse — and emits the same trace shape:
+        <code>{version, session, events, marks, stats}</code>. An event is one
+        tool call joined with its result: <code>seq</code>, <code>ts</code>,
+        <code>tool</code>, <code>action</code>, <code>targets</code>,
+        <code>resultBytes</code>, <code>isError</code>,
+        <code>outcomeKnown</code>, <code>outside</code>, and
+        <code>summary</code>, where the action is one of
+        <code>search</code>, <code>read</code>,
+        <code>edit</code>, <code>exec</code>, <code>verify</code>, or
+        <code>other</code>. Shell commands classify conservatively: substrings
+        like <code>pytest</code>, <code>go test</code>, and
+        <code>npm run build</code> mean verify; anything unrecognized stays
+        exec.</p>
+        <p>Each target carries a touch state on a strict lattice —
+        <b>edit &gt; read &gt; hit</b> — and a file only ever escalates during
+        playback: a later read never downgrades an earlier edit. Marks record
+        what happened between events: user messages (the note keeps up to
+        2,000 runes of text), context compactions, and subagent launches.</p>
+        <div class="wiki-table-wrap">
+          <table class="wiki-table">
+            <thead><tr><th>Touch</th><th>HUD word</th><th>Rank</th><th>Meaning</th></tr></thead>
+            <tbody>
+              <tr><td><code>hit</code></td><td>seen</td><td>1</td><td>Surfaced by a search, glob, or listing; never opened. Olive.</td></tr>
+              <tr><td><code>read</code></td><td>read</td><td>2</td><td>Opened and read, with line ranges when the tool declared them. Steel.</td></tr>
+              <tr><td><code>edit</code></td><td>edited</td><td>3</td><td>Written, edited, or patched. Lime.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="wiki-note">The trace grades its own observability per
+        session, not per harness: claude-code and pi carry structural error
+        flags and grade exact, but one event whose outcome the log leaves
+        unknown downgrades that whole session to estimated; codex, whose
+        failures are inferred from output text, is always estimated. The HUD
+        shows a tilde instead of hiding the difference.</p>
+      </section>
+
+      <section class="wiki-section">
+        <h2>The artifacts</h2>
+        <div class="wiki-file-list">
+          <article class="wiki-file">
+            <header><code>trace.json</code><span>normalized session replay</span></header>
+            <p>The portable record of one session: identity with
+            <code>cwd</code> and <code>commit</code>, the event and mark
+            streams, and a derived <code>stats</code> block —
+            fovea/parafovea/edited file counts, regression and error rates,
+            churn, and edits after the last verify. Mirrored by
+            <code>schema/trace.schema.json</code>, version 1.</p>
+            <dl><div><dt>Writer</dt><dd>spacewalk trace &lt;session&gt; [-o out]</dd></div><div><dt>Server route</dt><dd>GET /api/sessions/{selector}/trace</dd></div></dl>
+          </article>
+          <article class="wiki-file">
+            <header><code>citymap.json</code><span>repository ground plan</span></header>
+            <p>A deterministic squarified treemap
+            (<code>squarified-treemap-v1</code>) of up to 10,000 files on a
+            fixed 120×120 plane. Footprint weight is
+            <code>sqrt(max(lines, bytes/4096, 16))</code>; the server ships
+            only 2D rectangles and the browser extrudes all heights. Files a
+            session touched by strong attestation — a tool that named the path,
+            never a path inferred from command text — that are provably gone
+            from the repo become ghosts and keep a tile; a file that is merely
+            unreadable, on a timeout or a permission error, gets no tile at
+            all, because a ghost there would lie.</p>
+            <dl><div><dt>Writer</dt><dd>spacewalk build &lt;repo&gt; [-o out]</dd></div><div><dt>Server routes</dt><dd>GET /api/sessions/{selector}/citymap · GET /api/repomap?repo=PATH</dd></div></dl>
+          </article>
+          <article class="wiki-file">
+            <header><code>~/.spacewalk/reports/&lt;sessionKey&gt;.json</code><span>judge evaluation cache</span></header>
+            <p>An optional LLM evaluation of the trace: a task rubric derived
+            from the user’s own messages plus four fixed dimensions —
+            exploration, scope, wandering, verification. The judge runs a
+            sealed local agent CLI (claude preferred, then codex) with tools
+            disabled; findings must cite event seqs that exist, and verdicts
+            roll up mechanically in Go.</p>
+            <dl><div><dt>Writers</dt><dd>spacewalk analyze &lt;session&gt; · POST /api/sessions/{selector}/analyze</dd></div><div><dt>Freshness</dt><dd>sha256 digest of the exact evidence document, plus pinned prompt versions</dd></div></dl>
+          </article>
+        </div>
+      </section>
+
+      <section class="wiki-section wiki-grid">
+        <div>
+          <h2>Privacy boundary</h2>
+          <p>A trace is not <code>.xo</code>-safe. Marks keep up to 2,000
+          runes of the user’s own message text and event summaries keep up to
+          96 runes of command text, because the walk is unreadable without
+          them. Treat <code>trace.json</code> as transcript-adjacent: share it
+          deliberately, never automatically.</p>
+        </div>
+        <div>
+          <h2>Write boundary</h2>
+          <p>Space Walk reads the runtimes’ session directories and the
+          repository; it writes nothing back to either. Its only writes are
+          the judge report cache under <code>~/.spacewalk/reports</code> and
+          the neutral judge working directory
+          <code>~/.spacewalk/judge</code>, both safe to delete.</p>
+        </div>
+      </section>
+
+      <section class="wiki-section">
+        <h2>Two scenes, one encoding</h2>
+        <p>The V key cycles two views of the same playback state.</p>
+        <div class="wiki-file-list">
+          <article class="wiki-file">
+            <header><code>Firefly tree</code><span>radial layout, browser-computed</span></header>
+            <p>Files hang off the directory tree as a radial diagram, laid out
+            in the browser so switching views costs no server round trip.</p>
+            <dl><div><dt>Layout</dt><dd>Every file gets an identical angular
+            slot, subtrees own contiguous spans, depth grows in equal rings,
+            and the outer radius is
+            max(55, 4·√leaves).</dd></div><div><dt>Ghosts</dt><dd>Deleted-but-touched
+            files render as wireframe orbs — shape separates them where a third
+            grey never could.</dd></div></dl>
+          </article>
+          <article class="wiki-file">
+            <header><code>Attention terrain</code><span>extruded server treemap</span></header>
+            <p>The citymap’s flat rectangles extrude in place, so the skyline
+            is this session’s attention profile over the repository.</p>
+            <dl><div><dt>Height</dt><dd>Touch depth × revisits: base 7.2 for
+            edited, 4.2 for read, 1.6 for seen, times 1 + 0.35·log₂(visits).
+            Height means attention only when a session is loaded — in the
+            session-less map view (<code>spacewalk map</code>,
+            <code>GET /api/repomap</code>) the same tiles extrude by lines of
+            code instead, log-scaled and gamma-exaggerated between 0.3 and 16
+            so the skyline reads as towers and shacks rather than a
+            plateau.</dd></div><div><dt>Ghosts</dt><dd>Strongly attested
+            touches that are provably gone keep a dim grey tile; an unreadable
+            file is left out rather than guessed at.</dd></div></dl>
+          </article>
+        </div>
+        <div class="wiki-decision-list">
+          <div><b>Color says what happened.</b><p>Touch state only. The scenes
+          draw lit emissive tints of the flat HUD swatches (the edit glow is
+          <code>#a8d94f</code>), but hue family and salience order match what
+          the legend promises.</p></div>
+          <div><b>Size says how much.</b><p>Halo radius in the tree and column
+          height in the terrain grow with the logarithm of the visit count —
+          revisits, never touch type.</p></div>
+          <div><b>Brightness says where.</b><p>Branch edges lighten along
+          paths to touched files; the branch guides the eye while the leaf
+          carries the classification.</p></div>
+          <div><b>Selection is a shape.</b><p>A ring and a light beam in the
+          tree — never a recolor that could impersonate a touch state.</p></div>
+        </div>
+        <p>There is no bloom pass and no postprocessing: the glow is faked
+        with unlit materials that skip tone mapping, additive gradient
+        sprites, and vertex shading baked into the column geometry so light
+        pools at the crest. An ember-colored trail of Bézier arcs connects the
+        last twelve fixations, and a firefly — the playhead avatar the tree
+        scene is named for — rides its head.</p>
+      </section>
+
+      <section class="wiki-section">
+        <h2>The playback deck</h2>
+        <div class="wiki-table-wrap">
+          <table class="wiki-table wiki-matrix">
+            <thead><tr><th>Control</th><th>What it shows</th></tr></thead>
+            <tbody>
+              <tr><td>Histogram</td><td>The whole session folded into a 160-bucket histogram. Each bar takes the color of its dominant action, ties broken edit &gt; verify &gt; read &gt; search &gt; exec &gt; other, so rare, load-bearing edits win the bucket.</td></tr>
+              <tr><td>Mark strip</td><td>User turns, context compactions, and subagent launches as distinct glyphs over the same time axis.</td></tr>
+              <tr><td>Agent lenses</td><td>Clicking a subagent mark replays that subagent’s own trace on the root repository’s map, with a remembered per-agent playhead.</td></tr>
+              <tr><td>Transport</td><td>Speeds 1×, 4×, and 16×. The deck opens at the end of the walk so the finished footprint is the first thing you see.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="wiki-section">
+        <h2>The HTTP surface</h2>
+        <p>The server binds 127.0.0.1 only and wraps every route in a
+        loopback guard with two halves. The Host check is unconditional: a
+        non-local Host is rejected outright, which is what a rebinding attack
+        would have to forge. The provenance check is conditional: a non-GET
+        request that carries an <code>Origin</code> or
+        <code>Sec-Fetch-Site</code> header must name this exact origin —
+        another loopback port is still cross-site — and gets a 403 otherwise,
+        because POST analyze starts a judge run that costs real tokens.
+        Header-less local clients such as curl pass untouched.</p>
+        <div class="wiki-table-wrap">
+          <table class="wiki-table wiki-matrix">
+            <thead><tr><th>Route</th><th>Returns</th></tr></thead>
+            <tbody>
+              <tr><td><code>GET /api/sessions?fresh=1</code></td><td>Sessions from all three harness directories, newest first, with report badges; fresh=1 bypasses the 5-second list cache.</td></tr>
+              <tr><td><code>GET /api/sessions/{selector}/snapshot</code></td><td>The trace and citymap pair in one call — what the UI loads on selection. The selector is a session key, session id, or file basename.</td></tr>
+              <tr><td><code>GET /api/sessions/{selector}/trace</code></td><td>The normalized trace alone.</td></tr>
+              <tr><td><code>GET /api/sessions/{selector}/citymap</code></td><td>The repository map alone.</td></tr>
+              <tr><td><code>GET /api/sessions/{selector}/report</code></td><td>Judge status and the cached report: state, staleness, available judge CLIs.</td></tr>
+              <tr><td><code>POST /api/sessions/{selector}/analyze</code></td><td>Starts a judge run (optional body with cli, model, rubric); 202 while running, 409 for a conflicting configuration, 429 past two concurrent judges.</td></tr>
+              <tr><td><code>GET /api/sessions/{selector}/agents</code></td><td>The subagent graph behind agent lenses.</td></tr>
+              <tr><td><code>GET /api/sessions/{selector}/agents/{id}/trace</code></td><td>One subagent’s trace, re-projected onto the root session’s map.</td></tr>
+              <tr><td><code>GET /api/repomap?repo=PATH</code></td><td>A session-less citymap of any local repository — the static map view.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="wiki-section">
+        <h2>The CLI</h2>
+        <div class="wiki-table-wrap">
+          <table class="wiki-table wiki-matrix">
+            <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+            <tbody>
+              <tr><td><code>spacewalk serve</code></td><td>Scan the session directories and serve the UI; the default when no arguments are given. Flags: --port (default 0, a random local port), --claude-dir, --codex-dir, --pi-dir, --dev, --no-open.</td></tr>
+              <tr><td><code>spacewalk open &lt;session.jsonl&gt;</code></td><td>Serve and open one specific session file.</td></tr>
+              <tr><td><code>spacewalk map &lt;repo&gt;</code></td><td>Open the repository citymap with no session; height reads as lines of code.</td></tr>
+              <tr><td><code>spacewalk build &lt;repo&gt; [-o out]</code></td><td>Write citymap.json offline.</td></tr>
+              <tr><td><code>spacewalk trace &lt;session&gt; [-o out]</code></td><td>Write trace.json offline — the join point for external tooling.</td></tr>
+              <tr><td><code>spacewalk analyze &lt;session&gt;</code></td><td>Run the judge offline. Flags: --judge claude or codex, --model, --no-cache, --no-rubric, --timeout (default 10m).</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="wiki-note"><code>make build</code> embeds the web bundle and
+        produces <code>bin/spacewalk</code>; this machine runs
+        <code>bin/spacewalk serve --port 8765</code> so the UI is always at
+        the same address.</p>
+      </section>
+
+      <section class="wiki-section">
+        <h2>Customizing it</h2>
+        <p>The theme is a token system: the flat data-encoding swatches live
+        in the <code>:root</code> block of <code>web/src/styles.css</code>, the
+        scenes’ emissive touch tints live in
+        <code>web/src/scene/sceneUtils.ts</code>, and the terrain’s structural
+        colors — unvisited, ghost, and the lines-of-code gradient — are still
+        local to <code>web/src/scene/CityScene.tsx</code>. The palette is
+        chosen so the three touch states stay separable without hue alone:
+        olive, steel, and lime differ in lightness as well as hue, and rust is
+        reserved for error so no data state can be mistaken for trouble. These
+        are deliberately <em>not</em> the raw xo-space brand tokens — fed to a
+        six-check validator as a categorical set against the night sky, the
+        brand greens land at ΔE 11.1 for normal vision against a floor of 15,
+        meaning seen and edited blur together even with full color vision. The
+        shipped triad clears that gate at ΔE 17.4 normal and 16.1 under
+        simulated deuteranopia; the run and its thresholds are recorded in the
+        fork at <code>docs/palette-validation.md</code>. Every swatch clears
+        3:1 against the <code>#0b0c0f</code> sky;
+        <code>--touch-hit</code> measures 3.3:1 there, so it is a fill color,
+        not a small-text color.</p>
+        <div class="wiki-table-wrap">
+          <table class="wiki-table">
+            <thead><tr><th>Token</th><th>Value</th><th>Carries</th></tr></thead>
+            <tbody>
+              <tr><td><code>--touch-hit</code></td><td><code>#6a6700</code></td><td>seen files (olive)</td></tr>
+              <tr><td><code>--touch-read</code></td><td><code>#5399d1</code></td><td>read files (steel)</td></tr>
+              <tr><td><code>--touch-edit</code></td><td><code>#78a31e</code></td><td>edited files (lime)</td></tr>
+              <tr><td><code>--hot</code> / <code>--alarm</code></td><td><code>#c8674c</code></td><td>errors and the trail ember — rust is reserved for trouble</td></tr>
+              <tr><td><code>--act-search</code></td><td><code>#99927e</code></td><td>search activity, a deliberate warm neutral</td></tr>
+              <tr><td><code>--act-exec</code></td><td><code>#57687d</code></td><td>exec activity, a deliberate cool neutral</td></tr>
+              <tr><td><code>--act-verify</code></td><td><code>#477120</code></td><td>verification runs</td></tr>
+              <tr><td><code>--accent</code> / <code>--accent-deep</code></td><td><code>#a8d94f</code> / <code>#83d63a</code></td><td>UI accent, matching the XO logo green</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="wiki-table-wrap">
+          <table class="wiki-table wiki-matrix">
+            <thead><tr><th>Where the knobs live</th><th>What it owns</th></tr></thead>
+            <tbody>
+              <tr><td><code>web/src/styles.css</code> <code>:root</code></td><td>The flat data swatches above, and the <code>#0b0c0f</code> sky.</td></tr>
+              <tr><td><code>web/src/scene/sceneUtils.ts</code></td><td>Emissive touch tints shared by both scenes.</td></tr>
+              <tr><td><code>web/src/scene/CityScene.tsx</code></td><td>Column height bases, plus the unvisited, ghost, and lines-of-code gradient colors.</td></tr>
+              <tr><td><code>web/src/scene/treeLayout.ts</code></td><td>Angular slots and the outer radius of the firefly tree.</td></tr>
+              <tr><td><code>web/src/ui/Timeline.tsx</code></td><td>Histogram bucket count and the playback speeds.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <ol class="wiki-steps">
+          <li><b>Add a harness adapter.</b><p>Implement the five-method
+          <code>adapter.Source</code> interface in a new
+          <code>internal/adapter/&lt;name&gt;</code> package. Detection must
+          be content-based: set a recognized flag per line and return an error
+          otherwise, so the adapter chain can fall through.</p></li>
+          <li><b>Register it in three chains.</b><p>The server adapter list in
+          <code>internal/server/server.go</code>, the CLI fallthrough in
+          <code>cmd/spacewalk/main.go</code>, and the offline bench in
+          <code>cmd/rubriceval/main.go</code> — which today registers
+          claude-code and codex only, so add yours there too if you want it
+          benchable. Give serve and open a --&lt;name&gt;-dir flag.</p></li>
+          <li><b>Update schema and tests together.</b><p>Any change to an
+          exported JSON shape lands with its mirror in
+          <code>schema/</code> and the tests in the same change — the repo
+          contract treats the schemas as part of the API.</p></li>
+        </ol>
+      </section>
+
+      <section class="wiki-section">
+        <h2>Space Walk in the quirq program</h2>
+        <p>The quirq calculus prices a unit of work u = (S₀, G, τ, B): commit
+        a before-state, a weighted check battery, a threshold, and a budget,
+        then score only the captured after-state S₁. Axiom A2 is that checks
+        read captured state only, never the worker’s transcript — which is
+        exactly why traces matter here: a trace can never be a check, which
+        makes it the natural audit-evidence layer for the gold-score sampling
+        §2.7 uses to estimate its gaps. That pairing is this wiki’s proposal,
+        not a dependency the whitepaper already has. A trace carries
+        <code>session.cwd</code> and <code>session.commit</code>, so sessions
+        join deterministically to a repository and to tag-delimited unit
+        windows. The recipes below pair Space Walk with the quirq
+        calculator’s git observation API; quirq’s machine-local watcher state
+        is a different layer.</p>
+      </section>
+
+      <aside class="wiki-callout wiki-tab-callout">
+        <div><b>Watcher state is the other half</b><p>Space Walk reads the
+        runtimes’ native session logs directly; quirq’s watcher derives its own
+        operational model from the same sources. The Sessions tab reads the
+        same Claude Code and Codex stores for token telemetry, where Space Walk
+        reads them for geometry — neither writes them. Compare machine-local
+        watcher state with portable .xo outputs side by side in the Quirq
+        view, opened from Setup’s header.</p></div>
+        <button type="button" data-open-tab="quirq">Open Quirq</button>
+      </aside>
+
+      <section class="wiki-section">
+        <h2>Recipe 1 · Did the walk stay inside the settled diff?</h2>
+        <div class="wiki-recipe">
+          <div class="wiki-recipe-step"><small>1</small><b>Pin the states</b>
+          <code>POST /api/repo/tag</code>
+          <p>Tag S₀ in the calculator when the unit starts and S₁ at
+          settlement; the body carries path, name, and an optional ref.</p></div>
+          <i>→</i>
+          <div class="wiki-recipe-step"><small>2</small><b>Pull both records</b>
+          <code>GET /api/repo/compare?path=&lt;repo&gt;&amp;from=u42-s0&amp;to=u42-s1</code>
+          <p>The net per-file diff is the state delta the check battery G
+          reads; <code>spacewalk trace</code> gives the touch map of the same
+          repository.</p></div>
+          <i>→</i>
+          <div class="wiki-recipe-step"><small>3</small><b>Overlay</b>
+          <p>Touched but absent from the diff is churn that never reached S₁ —
+          cost without Q. Changed but never touched is an out-of-band edit: a
+          human-rescue or contamination candidate, and Definition 4’s
+          attribution rule — human rescue attributed to the rescued unit —
+          says it must land on this unit’s C_total instead of being
+          dropped.</p></div>
+        </div>
+      </section>
+
+      <section class="wiki-section">
+        <h2>Recipe 2 · What audit evidence backs V?</h2>
+        <div class="wiki-recipe">
+          <div class="wiki-recipe-step"><small>1</small><b>Judge the session</b>
+          <code>spacewalk analyze &lt;session&gt;</code>
+          <p>The rubric derives task-specific criteria and scores them against
+          real event seqs.</p></div>
+          <i>→</i>
+          <div class="wiki-recipe-step"><small>2</small><b>Read a shadow V</b>
+          <p>Per-criterion verdicts approximate a gold score for the unit, and
+          coverage grades force insufficient-data instead of guessing.</p></div>
+          <i>→</i>
+          <div class="wiki-recipe-step"><small>3</small><b>Feed O</b>
+          <p>Compare the shadow score against the state-addressed V from G to
+          estimate the overstatement gap O(T), which is the only gap the
+          correction spends: QER*(T) = QER(T)·(1 − O(T)). The understatement
+          gap U(T) is defined beside it but unused, and the whitepaper marks
+          the whole correction OPEN — it discounts linearly and applies a
+          portfolio-level fix to a concentrated problem.</p></div>
+        </div>
+      </section>
+
+      <section class="wiki-section">
+        <h2>Recipe 3 · What did the human leg cost?</h2>
+        <div class="wiki-recipe">
+          <div class="wiki-recipe-step"><small>1</small><b>Collect marks</b>
+          <code>marks[] type user-message</code>
+          <p>Every mid-unit human message is a seq-positioned mark, and
+          <code>stats.userTurns</code> counts them.</p></div>
+          <i>→</i>
+          <div class="wiki-recipe-step"><small>2</small><b>Meter h</b>
+          <p>Count marks — and duration, via event timestamps — between the S₀
+          and S₁ tags, price the time at r_human, and add the leg to
+          C_total.</p></div>
+          <i>→</i>
+          <div class="wiki-recipe-step"><small>3</small><b>Respect the bias
+          bound</b>
+          <p>Omitting the human leg inflates efficiency: at a $0.128
+          machine-cost unit and a $65/h loaded rate, 30 seconds of rescue
+          inflates naive QER 5.2× — and cheaper inference makes that worse, not
+          better. Noise in the meter is tolerable; gaps in it are not.</p></div>
+        </div>
+      </section>
+
+      <section class="wiki-section">
+        <h2>Recipe 4 · What is QER for this repository?</h2>
+        <div class="wiki-recipe">
+          <div class="wiki-recipe-step"><small>1</small><b>Group sessions</b>
+          <code>trace.session.cwd + commit</code>
+          <p>Sessions group deterministically to a repository and to the unit
+          windows the calculator’s tags delimit.</p></div>
+          <i>→</i>
+          <div class="wiki-recipe-step"><small>2</small><b>Compute honestly</b>
+          <p>QER(T) = ΣQ/ΣC strictly as a ratio of sums — the whitepaper’s
+          worked example shows mean-of-ratios flattering the portfolio by
+          55% — and never quoted without n and CV.</p></div>
+          <i>→</i>
+          <div class="wiki-recipe-step"><small>3</small><b>Drill into light</b>
+          <code>GET /api/sessions/{selector}/snapshot</code>
+          <p>Click any unit tile in the dashboard and replay that session on
+          its map.</p></div>
+        </div>
+      </section>
+
+      <section class="wiki-section">
+        <h2>Recipe 5 · Is inference changing S₁ at all?</h2>
+        <div class="wiki-recipe">
+          <div class="wiki-recipe-step"><small>1</small><b>Input meter</b>
+          <code>events[].resultBytes</code>
+          <p>Cumulative result bytes and action counts are the input meter —
+          light moving on the map.</p></div>
+          <i>→</i>
+          <div class="wiki-recipe-step"><small>2</small><b>Output meter</b>
+          <p>The running S₀→S₁ diff footprint from the calculator is the
+          output meter: files whose settled content actually changed.</p></div>
+          <i>→</i>
+          <div class="wiki-recipe-step"><small>3</small><b>Spot divergence</b>
+          <p>A glowing map with no settled change is meter separation made
+          visible: inference that does not change S₁ cannot change V or Q,
+          while it does change C_total.
+          <code>stats.eventsBeforeFirstEdit</code> already summarizes the
+          opening stretch of exactly this pattern.</p></div>
+        </div>
+      </section>
+
+      <section class="wiki-section">
+        <h2>Interpretation and troubleshooting</h2>
+        <div class="wiki-check-grid">
+          <div><b>No sessions listed</b><p>Point the scan at the right
+          directories with --claude-dir, --codex-dir, or --pi-dir. Recognition
+          is content-based, so a renamed <code>.jsonl</code> still parses, but
+          a wrong directory yields nothing at all.</p></div>
+          <div><b>Empty terrain, live trace</b><p>The session’s
+          <code>cwd</code> is not this repository. The map is built from cwd
+          plus commit, never from the paths the events happen to name.</p></div>
+          <div><b>Tilde on the error count</b><p>Estimated observability: codex
+          infers failures from output text, and a claude-code or pi session
+          grades estimated too as soon as its log leaves one outcome
+          unknown.</p></div>
+          <div><b>Wireframe orbs or grey tiles</b><p>Ghosts — strongly attested
+          touches provably gone from the repo. A file that is merely
+          unreadable gets no tile, because a ghost there would lie.</p></div>
+          <div><b>Judge unavailable</b><p>Neither <code>claude</code> nor
+          <code>codex</code> is on PATH; the report route lists the CLIs it
+          actually found.</p></div>
+          <div><b>429 on analyze</b><p>Two judge runs are already active. The
+          server caps concurrency at two subprocesses and asks you to wait for
+          one to finish.</p></div>
+          <div><b>Stale session list</b><p>The list is cached 5 seconds and
+          <code>?fresh=1</code> bypasses it; repository maps are cached 30
+          seconds.</p></div>
+          <div><b>Heights look wrong</b><p>Attention height exists only with a
+          session loaded. In the session-less map view the same tiles extrude
+          by lines of code instead.</p></div>
+        </div>
+      </section>
+
+      <section class="wiki-section">
+        <h2>Primary research sources</h2>
+        <div class="wiki-table-wrap">
+          <table class="wiki-table wiki-matrix wiki-sources">
+            <thead><tr><th>Source</th><th>What it establishes</th></tr></thead>
+            <tbody>
+              <tr><td><a href="https://github.com/cosmtrek/mindwalk" target="_blank" rel="noreferrer">github.com/cosmtrek/mindwalk</a></td><td>The upstream project Space Walk forks — MIT-licensed, by cosmtrek (Ricko Yu).</td></tr>
+              <tr><td><a href="https://www.win.tue.nl/~vanwijk/stm.pdf" target="_blank" rel="noreferrer">Bruls, Huizing &amp; van Wijk — Squarified Treemaps</a></td><td>The layout family <code>squarified-treemap-v1</code> derives from: rows packed against the shorter remaining side to keep tiles near-square. Space Walk’s v1 scores row breaks with the paper’s aspect metric but lays each row along the longer side, so it is deterministic without being the paper’s procedure.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <aside class="wiki-callout">
+        <b>Short mental model</b>
+        <p>The trace remembers where the agent’s attention went. The citymap
+        remembers what the repository looks like. Space Walk multiplies the
+        two into light — and quirq prices what the light settled.</p>
       </aside>
     </article>`;
 }

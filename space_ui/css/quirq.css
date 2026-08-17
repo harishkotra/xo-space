@@ -9,8 +9,9 @@
 .quirq-hero h1{font:500 clamp(34px,4vw,54px)/1 var(--serif);letter-spacing:-.03em}
 .quirq-hero h1 em{color:var(--accent);font-style:normal}
 .quirq-hero p{max-width:700px;margin-top:11px;color:var(--ink-2);font-size:13.5px;line-height:1.55}
-#quirq-refresh{flex:none;border:1px solid var(--line);border-radius:999px;padding:8px 15px;font:600 9px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2)}
-#quirq-refresh:hover{border-color:#46505e;color:var(--ink)}
+.quirq-hero-actions{display:flex;flex:none;align-items:center;gap:8px}
+#quirq-refresh,#quirq-back{flex:none;border:1px solid var(--line);border-radius:999px;padding:8px 15px;font:600 9px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2)}
+#quirq-refresh:hover,#quirq-back:hover{border-color:#46505e;color:var(--ink)}
 #quirq-refresh:disabled{opacity:.5;cursor:wait}
 .quirq-path{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) auto;align-items:center;gap:18px;margin-bottom:10px;padding:13px 16px;border:1px solid var(--line);border-radius:12px;background:rgba(16,19,24,.76)}
 .quirq-path>div{min-width:0}

@@ -6,7 +6,7 @@
    forbids). Cross-view jumps go through ctx.switchTo (`go`). All graph
    content comes from ./data/space.json; nothing is embedded here; the data
    lives on disk, next to this page. */
-import {apiFetch} from '../core/api.js';
+import {API_BASE,apiFetch} from '../core/api.js';
 import {toast} from '../core/ui.js';
 
 let go=()=>{};   /* ctx.switchTo, captured on first mount */
@@ -421,6 +421,7 @@ function drawGraph(now){
   const k=cam.k;
   gc.setTransform(dpr*k,0,0,dpr*k,dpr*(GW/2-cam.x*k),dpr*(GH/2-cam.y*k));
   const es=shownEdges(),vs=shownNodes();
+  layoutSats(now);
   const inFocus=id=>!focusSet||focusSet.has(id);
   if(DATA.meta.enclose)drawEnclosures(k);
   /* path reveal progress */
@@ -457,6 +458,7 @@ function drawGraph(now){
     }else{gc.moveTo(a.x,a.y);gc.lineTo(b.x,b.y);}
     gc.strokeStyle=hexA(color,alpha);gc.lineWidth=width;gc.lineCap='round';gc.stroke();
   }
+  drawSatOrbits(k);
   /* ---- nodes ---- */
   const drawOrder=pathIds?[...vs].sort((a,b)=>(pathIds.includes(a.id)?1:0)-(pathIds.includes(b.id)?1:0)):vs;
   for(const n of drawOrder){
@@ -523,6 +525,7 @@ function drawGraph(now){
     }
     gc.globalAlpha=1;
   }
+  drawSatDots(now,k);
   /* ---- labels (screen space) ---- */
   gc.setTransform(dpr,0,0,dpr,0,0);
   gc.textAlign='center';
@@ -555,6 +558,7 @@ function drawGraph(now){
       halo(n.label,sx,sy-n.r*k-7,on?`rgba(233,228,217,${.94*a})`:`rgba(179,173,160,${.62*a})`);
     }
   }
+  drawSatLabels(k);
   gc.globalAlpha=1;
   /* pulse ring */
   if(pulseN){
@@ -602,6 +606,7 @@ function pick(mx,my){
 gcv.addEventListener('pointerdown',e=>{
   gcv.setPointerCapture(e.pointerId);
   downX=lastX=e.clientX;downY=lastY=e.clientY;moved=false;
+  if(pickSat(...evXY(e))){camAnim=null;return;} /* satellites are not bodies */
   const n=pick(...evXY(e));
   if(n&&n.type!=='root'){drag=n;n.fx=n.x;n.fy=n.y;}
   else pan=true;
@@ -619,6 +624,14 @@ gcv.addEventListener('pointermove',e=>{
     lastX=e.clientX;lastY=e.clientY;
     hideHC();
   }else{
+    const s=pickSat(...evXY(e));
+    if(s){
+      if(satHover!==s.key)satHover=s.key;
+      hoverId=null;gcv.style.cursor='pointer';
+      showSatHC(s,e.clientX,e.clientY);
+      return;
+    }
+    satHover=null;
     const n=pick(...evXY(e));
     hoverId=n?n.id:null;
     gcv.style.cursor=n?'pointer':'default';
@@ -634,6 +647,8 @@ gcv.addEventListener('pointerup',e=>{
   }
   pan=false;
   if(moved)return;
+  const sat=pickSat(...evXY(e));
+  if(sat){revealTodoRow(sat);return;}
   const n=pick(...evXY(e));
   const now=performance.now();
   if(now-lastUp<300){
@@ -670,6 +685,7 @@ function select(id,depth,fly=true){
   document.getElementById('crumb-depth').textContent=`${depth} hop${depth>1?'s':''} · ${focusSet.size} nodes`;
   document.getElementById('crumb').classList.add('is-on');
   openPanel(n);
+  syncSats(n);
   if(fly){
     const kT=Math.max(cam.k,1.6);
     const off=GW>760?PANEL_W/2/kT:0;
@@ -680,6 +696,7 @@ function clearFocus(){
   selId=null;focusSet=null;focusDepth=0;
   document.getElementById('crumb').classList.remove('is-on');
   closePanel();
+  clearSats();
 }
 function clearPath(){pathIds=null;pathEdges=null;}
 function setExp(g,v){
@@ -827,7 +844,7 @@ function placeHC(mx,my){
   if(y+r.height>innerHeight-8)y=my-r.height-18;
   hc.style.left=Math.max(8,x)+'px';hc.style.top=Math.max(64,y)+'px';
 }
-function hideHC(){hc.classList.remove('is-on');hoverId=null;}
+function hideHC(){hc.classList.remove('is-on');hoverId=null;satHover=null;}
 
 /* ============================== DETAIL PANEL ============================== */
 const panel=document.getElementById('panel');
@@ -861,13 +878,18 @@ function openPanel(n){
       ${n.path?`<div class="path">${esc(n.path)}</div>`:''}
     </div>
     <div class="psec"><h4>About</h4><p>${esc(n.blurb||'')}</p></div>
+    ${todoSectionHTML(n)}
     ${conns?`<div class="psec"><h4>Connections</h4>${conns}</div>`:''}
     <div class="pacts">
       ${n.type==='leaf'||n.type==='group'?`<button data-act="timeline">Show on timeline</button>`:''}
+      ${previewable(n)?`<button data-act="preview">Preview file</button>`:''}
     </div>`;
   panel.classList.add('is-open');
   panel.dataset.id=n.id;
 }
+/* Only in the graph dataset: there a leaf is a file with a
+   "<project>/<relative path>" path. A dashboard leaf is a whole project. */
+const previewable=n=>bootDataset==='graph'&&n.type==='leaf'&&!!n.path&&n.path.includes('/');
 function closePanel(){panel.classList.remove('is-open');}
 document.getElementById('panel-close').addEventListener('click',()=>{clearFocus();clearPath();});
 panel.addEventListener('click',e=>{
@@ -880,15 +902,288 @@ panel.addEventListener('click',e=>{
     pulseN={id:n.id,t0:performance.now()};
     return;
   }
+  const row=e.target.closest('.ptodo');
+  if(row){
+    satPulse={key:row.dataset.todo,t0:performance.now()};
+    return;
+  }
   const a=e.target.closest('[data-act]');
   if(!a)return;
   const n=byId.get(panel.dataset.id);
-  if(a.dataset.act==='timeline'){traceOnTimeline(n);}
+  if(a.dataset.act==='timeline'){traceOnTimeline(n);return;}
+  if(a.dataset.act==='preview'){
+    const cut=n.path.indexOf('/');
+    dispatchEvent(new CustomEvent('space:preview-file',{detail:{
+      project:n.path.slice(0,cut),path:n.path.slice(cut+1),name:n.label}}));
+    return;
+  }
+  if(a.dataset.act==='todos'){
+    const pid=satHost;
+    if(!pid)return;
+    satCache.delete(pid);
+    satHost=null;            /* defeat syncSats' same-project early return */
+    syncSats(byId.get(pid));
+  }
 });
 function ensureShown(n){
   if(n.type==='leaf'){
     if(!expanded.get(n.group)){setExp(byId.get(n.group),true);reheat(.4);}
   }
+}
+
+/* ============================== TODO SATELLITES ==============================
+   Dashboard only: there a leaf IS an xo-project (leaf id == project id), so
+   selecting one can show its live todos. In the Graph dataset leaves are files
+   and the whole feature stays switched off.
+
+   Satellites are UI state, never graph data: nothing is pushed into NODES /
+   EDGES / byId / LEAVES. The model is built once from the dataset (:136-161)
+   and half a dozen subsystems read it as a snapshot — LEAVES-derived counts,
+   the timeline's lanes and axis, search, the re-root walk. A todo injected
+   there would invent a timeline lane and inflate "N projects"; keeping them
+   out of the model means none of those need to know this feature exists.
+   The cost is that they get no adjacency, so hover/click/label are handled
+   explicitly below. Positions are recomputed from the host each frame, so the
+   constellation follows drags and settling for free without any force. */
+const SAT_DOTS=28;    /* dots drawn — beyond this the orbit reads as noise */
+const SAT_ROWS=40;    /* rows listed in the panel */
+const SAT_TTL=20000;  /* ms a fetched list stays fresh (re-click is instant) */
+const SAT_MIN_K=.55;  /* below this zoom, dots would collide with sibling nodes */
+/* Same order the Files tab lists todos in (projects.js:28). Duplicated rather
+   than imported: views never import each other (see the registry contract). */
+const ST_ORDER={in_progress:0,pending:1,blocked:2,completed:3,cancelled:4};
+const ST_DONE=new Set(['completed','cancelled']);
+const ST_COLOR={in_progress:ACCENT,blocked:'#e0b04c',pending:'#b3ada0',
+  completed:'#7d786d',cancelled:'#7d786d'};
+let satHost=null;    /* project id the constellation belongs to, or null */
+let satRows=[];      /* every todo, ST_ORDER-sorted — the panel's source */
+let satDots=[];      /* satRows.slice(0,SAT_DOTS) — the canvas's source */
+let satState='idle'; /* idle | loading | ready | error */
+let satNote='';      /* one-line reason when state is error */
+let satToken=0;      /* race guard: bumped whenever the selection changes */
+let satT0=0;         /* grow-in start */
+let satHover=null;   /* key of the hovered dot */
+let satPulse=null;   /* {key,t0} — panel row clicked, flash its dot */
+const satCache=new Map();
+
+/* The one gate. Everything else early-returns on a null host. */
+const todoProjectId=n=>bootDataset==='dashboard'&&n&&n.type==='leaf'?n.id:null;
+
+function shapeTodos(res){
+  if(!res.ok){
+    return{rows:[],state:'error',
+      note:res.notImplemented?'todos are not available for the active agent'
+        :res.offline?'xo-cowork-api is unreachable':String(res.error||'could not read todos')};
+  }
+  const rows=[];
+  for(const [sid,sess] of Object.entries(res.data.sessions||{})){
+    for(const t of sess.todos||[]){
+      rows.push({key:sid+'/'+t.id,sid,runtime:sess.runtime||'',
+        status:t.status||'pending',content:t.content||'',
+        st:ST_ORDER[t.status]??9});
+    }
+  }
+  rows.sort((a,b)=>a.st-b.st||a.content.localeCompare(b.content));
+  rows.forEach((r,i)=>{r.i=i;});
+  return{rows,state:'ready',note:'',updated:res.data.updated_at||null};
+}
+function tallyText(){
+  const by=new Map();
+  for(const r of satRows)by.set(r.status,(by.get(r.status)||0)+1);
+  return Object.keys(ST_ORDER)
+    .filter(s=>by.get(s))
+    .map(s=>`${by.get(s)} ${s.replace('_',' ')}`)
+    .join(' · ').toUpperCase();
+}
+
+function syncSats(n){
+  const pid=todoProjectId(n);
+  if(pid&&pid===satHost)return; /* same project re-selected: keep what we have */
+  clearSats();
+  if(!pid)return;
+  satHost=pid;satT0=performance.now();
+  const hit=satCache.get(pid);
+  if(hit&&performance.now()-hit.t<SAT_TTL){applySats(pid,hit,satToken);return;}
+  satState='loading';renderTodoSection();
+  loadSats(pid,satToken);
+}
+async function loadSats(pid,tok){
+  const res=await apiFetch(API_BASE+'/api/xo-projects/'+encodeURIComponent(pid)+'/todos');
+  if(tok!==satToken)return; /* a newer selection owns the screen */
+  const shaped=shapeTodos(res);
+  if(shaped.state==='ready'){
+    if(satCache.size>40)satCache.clear();
+    satCache.set(pid,{t:performance.now(),...shaped});
+  }
+  applySats(pid,shaped,tok);
+}
+function applySats(pid,shaped,tok){
+  /* Two guards, not one: the token catches an A→B→A sequence where the host
+     id alone would let A's older response paint over A's newer one. */
+  if(tok!==satToken||satHost!==pid)return;
+  satRows=shaped.rows;satDots=satRows.slice(0,SAT_DOTS);
+  satState=shaped.state;satNote=shaped.note;
+  renderTodoSection();
+  reheat(.12); /* nudge the loop so the grow-in animates from a settled layout */
+}
+function clearSats(){
+  satToken++;satHost=null;satRows=[];satDots=[];
+  satState='idle';satNote='';satHover=null;satPulse=null;
+}
+
+/* Concentric shells at roughly constant arc spacing: 10, 16, 22, … */
+function satSlot(i){
+  let shell=0,base=0;
+  for(;;){const cap=10+shell*6;if(i<base+cap)return{shell,slot:i-base,cap};base+=cap;shell++;}
+}
+/* The host must exist, be selected, and be on screen. A group can be collapsed
+   out from under a live selection (double-clicking its hub, :654) — without
+   this the constellation would hang in empty space. */
+function satAnchor(){
+  if(!satHost||!satDots.length)return null;
+  const host=byId.get(satHost);
+  return host&&isShown(host)?host:null;
+}
+function layoutSats(now){
+  const host=satAnchor();
+  if(!host)return;
+  const grow=REDUCED?1:easeCubicInOut(Math.min(1,(now-satT0)/380));
+  for(const s of satDots){
+    const{shell,slot,cap}=satSlot(s.i);
+    const a=slot/cap*Math.PI*2+shell*.31; /* fixed angle: hit-testing stays exact */
+    const rr=(host.r+26+shell*19)*grow;
+    s.x=host.x+Math.cos(a)*rr;s.y=host.y+Math.sin(a)*rr;
+    s.r=s.status==='in_progress'?4.2:s.status==='blocked'?3.6:ST_DONE.has(s.status)?2.4:3.2;
+  }
+}
+function drawSatOrbits(k){
+  const host=satAnchor();
+  if(!host||k<SAT_MIN_K)return;
+  const col=CAT[host.cat]?.color||'#b3ada0';
+  const shells=new Set(satDots.map(s=>satSlot(s.i).shell));
+  for(const shell of shells){
+    gc.beginPath();gc.arc(host.x,host.y,host.r+26+shell*19,0,Math.PI*2);
+    gc.strokeStyle=hexA(col,.10);gc.lineWidth=.7/k;gc.stroke();
+  }
+  /* One spoke per in-progress todo only: 28 spokes is a starburst, but the
+     handful of things actually in flight deserve a line back to the project. */
+  for(const s of satDots){
+    if(s.status!=='in_progress')continue;
+    const dx=s.x-host.x,dy=s.y-host.y,d=Math.hypot(dx,dy)||1;
+    gc.beginPath();
+    gc.moveTo(host.x+dx/d*(host.r+5),host.y+dy/d*(host.r+5));
+    gc.lineTo(s.x,s.y);
+    gc.strokeStyle=hexA(ACCENT,.34);gc.lineWidth=.9/k;gc.stroke();
+  }
+}
+function drawSatDots(now,k){
+  const host=satAnchor();
+  if(!host||k<SAT_MIN_K)return;
+  for(const s of satDots){
+    const col=ST_COLOR[s.status]||'#b3ada0';
+    const done=ST_DONE.has(s.status);
+    const on=s.key===satHover;
+    if(s.status==='in_progress'&&!REDUCED){
+      const b=.5+.5*Math.sin(now/520);
+      gc.beginPath();gc.arc(s.x,s.y,s.r+2.6+b*1.4,0,Math.PI*2);
+      gc.fillStyle=hexA(ACCENT,.10+b*.08);gc.fill();
+    }
+    gc.beginPath();gc.arc(s.x,s.y,s.r+(on?1.2:0),0,Math.PI*2);
+    if(s.status==='pending'){
+      gc.strokeStyle=hexA(col,on?.95:.6);gc.lineWidth=1.2/Math.sqrt(k);gc.stroke();
+    }else{
+      gc.fillStyle=hexA(col,done?.34:on?1:.88);gc.fill();
+    }
+    if(satPulse&&satPulse.key===s.key){
+      const t=(now-satPulse.t0)/900;
+      if(t>1)satPulse=null;
+      else{
+        gc.beginPath();gc.arc(s.x,s.y,s.r+2+t*16,0,Math.PI*2);
+        gc.strokeStyle=hexA(ACCENT,(1-t)*.8);gc.lineWidth=1.6/Math.sqrt(k);gc.stroke();
+      }
+    }
+  }
+}
+/* Screen space — called with the label transform already set. */
+function drawSatLabels(k){
+  const host=satAnchor();
+  if(!host)return;
+  const sx=(host.x-cam.x)*k+GW/2,sy=(host.y-cam.y)*k+GH/2;
+  gc.font='400 8.5px '+MONO;
+  const total=satRows.length;
+  /* Clear of the outermost shell, not of the node: the caption sitting inside
+     the orbit collides with the dots at the bottom of the constellation. */
+  const shells=Math.max(...satDots.map(s=>satSlot(s.i).shell))+1;
+  const out=(host.r+26+(shells-1)*19)*k+15;
+  halo(`${total} TODO${total===1?'':'S'}`,sx,sy+out,'rgba(168,217,79,.9)',.14);
+  const s=satDots.find(d=>d.key===satHover);
+  if(!s||k<SAT_MIN_K)return;
+  gc.font='400 10.5px '+SANS;
+  const t=s.content.length>44?s.content.slice(0,43)+'…':s.content;
+  halo(t,(s.x-cam.x)*k+GW/2,(s.y-cam.y)*k+GH/2-s.r*k-7,'rgba(233,228,217,.95)');
+}
+function pickSat(mx,my){
+  const host=satAnchor();
+  if(!host||cam.k<SAT_MIN_K)return null;
+  const w=toWorld(mx,my);
+  let best=null,bd=1e9;
+  for(const s of satDots){
+    const d=Math.hypot(s.x-w.x,s.y-w.y);
+    /* Deliberately tighter than pick()'s 12/k floor: a generous satellite
+       radius would swallow clicks meant for a neighbouring project. */
+    const hit=Math.max(s.r+2.5/cam.k,7/cam.k);
+    if(d<hit&&d<bd){bd=d;best=s;}
+  }
+  return best;
+}
+function showSatHC(s,mx,my){
+  const col=ST_COLOR[s.status]||'#b3ada0';
+  hc.innerHTML=`
+    <div class="art" style="background:linear-gradient(155deg, ${hexA(col,.24)}, ${hexA(col,.03)} 68%)">
+      <div class="kicker">Todo · ${esc(s.status.replace('_',' '))}</div>
+      <h5>${esc(s.content)}</h5>
+    </div>
+    <dl><dt>Project</dt><dd>${esc(satHost||'')}</dd>
+      ${s.runtime?`<dt>Runtime</dt><dd>${esc(s.runtime)}</dd>`:''}</dl>
+    <div class="foot">Click to find it in the list</div>`;
+  placeHC(mx,my);
+}
+/* Canvas → panel. The list is where the full text lives, so a dot click
+   scrolls to its row and flashes it rather than opening anything new. */
+function revealTodoRow(s){
+  const row=panel.querySelector(`[data-todo="${CSS.escape(s.key)}"]`);
+  if(!row)return;
+  row.scrollIntoView({block:'nearest'});
+  row.classList.add('is-flash');
+  setTimeout(()=>row.classList.remove('is-flash'),900);
+}
+
+function todoSectionHTML(n){
+  return todoProjectId(n)?`<div class="psec" id="panel-todos">${todoBodyHTML()}</div>`:'';
+}
+function todoBodyHTML(){
+  const head=`<h4>Todos<button class="tref" data-act="todos" title="Re-fetch todos">&#8635;</button></h4>`;
+  if(satState==='loading')return head+`<div class="prj-note">loading…</div>`;
+  if(satState==='error')return head+`<div class="prj-note">${esc(satNote)}</div>`;
+  if(!satRows.length)return head+`<div class="prj-note">no todos recorded yet</div>`;
+  const shown=satRows.slice(0,SAT_ROWS);
+  return head
+    +`<div class="ptally">${esc(tallyText())}</div>`
+    +`<div class="prj-todos">`+shown.map(t=>
+      `<button class="prj-todo ptodo" data-todo="${esc(t.key)}">
+        <span class="tchip st-${esc(t.status)}">${esc(t.status.replace('_',' '))}</span>
+        <span class="tcontent${ST_DONE.has(t.status)?' done':''}">${esc(t.content)}</span>
+        ${t.runtime?`<span class="truntime">${esc(t.runtime)}</span>`:''}
+      </button>`).join('')+`</div>`
+    +(satRows.length>shown.length?`<div class="prj-note">+${satRows.length-shown.length} more</div>`:'')
+    +(satRows.length>SAT_DOTS?`<div class="prj-note">${SAT_DOTS} of ${satRows.length} shown on the map</div>`:'');
+}
+/* Patch only this subtree: re-rendering the whole panel would reset its
+   scroll position and give the section two sources of truth. */
+function renderTodoSection(){
+  const el=document.getElementById('panel-todos');
+  if(!el||panel.dataset.id!==satHost)return;
+  el.innerHTML=todoBodyHTML();
 }
 
 /* ============================== SEARCH ============================== */
@@ -978,6 +1273,7 @@ hooks.focusProject=()=>{
   const n=byId.get('p_'+pendingFocus)||byId.get(pendingFocus);
   pendingFocus=null;
   if(!n)return;
+  ensureShown(n); /* a leaf handed over from the Tree lens may sit in a closed group */
   clearPath();
   select(n.id,1);
   pulseN={id:n.id,t0:performance.now()};
@@ -1015,6 +1311,18 @@ const MILES=DATA.milestones;
 const GITHIST=DATA.gitHistory||{};
 const histLanes=Object.keys(CAT).filter(cat=>(GITHIST[cat]||[]).length);
 const hasHist=histLanes.length>0;
+/* Both modes plot git dates only, so a project with no repository has no
+   lane at all. Files counts every project; without this note the Timeline
+   silently shows fewer and reads as broken data rather than as the absence
+   of git history it actually is. */
+const fileLanes=()=>Object.keys(CAT).filter(cat=>LEAVES.some(n=>n.cat===cat&&n.date));
+function coverageNote(){
+  const total=Object.keys(CAT).length;
+  const shown=(tMode==='project'?histLanes:fileLanes()).length;
+  const missing=total-shown;
+  if(!total||missing<=0)return'';
+  return ` Showing ${shown} of ${total} project${total===1?'':'s'}: ${missing} ${missing===1?'has':'have'} no git history to date (dates come from commits only).`;
+}
 const TMODE_KEY='space.timelineMode';
 let tMode='file';
 try{if(localStorage.getItem(TMODE_KEY)==='project'&&hasHist)tMode='project';}catch(_err){}
@@ -1027,9 +1335,13 @@ document.querySelectorAll('#tmode [data-tmode]').forEach(button=>{
   button.addEventListener('click',()=>setTMode(button.dataset.tmode));
 });
 function defaultSub(){
-  if(tMode==='project')return'Every project’s git history in parallel · newest at the top · dot size = commits that day.';
-  return DATA.meta.timelineSub||
-    'Scrub through the workspace as it grew, newest at the top. Open any cluster from the graph to watch its run unfold here.';
+  if(tMode==='project'){
+    return'Every project’s git history in parallel · newest at the top · dot size = commits that day.'
+      +coverageNote();
+  }
+  return(DATA.meta.timelineSub||
+    'Scrub through the workspace as it grew, newest at the top. Open any cluster from the graph to watch its run unfold here.')
+    +coverageNote();
 }
 function syncTModeUI(){
   document.querySelectorAll('#tmode [data-tmode]').forEach(button=>{

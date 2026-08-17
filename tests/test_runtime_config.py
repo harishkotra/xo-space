@@ -175,7 +175,12 @@ class RuntimeConfigTests(unittest.TestCase):
             ),
         ):
             self.assertTrue(runtime_config.secrets_restart_required())
-            self.assertEqual(runtime_config.restart_reasons(), ["secrets"])
+            with patch.object(
+                runtime_config,
+                "roots_restart_required",
+                return_value=False,
+            ):
+                self.assertEqual(runtime_config.restart_reasons(), ["secrets"])
 
     def test_source_diagnostics_count_sessions_without_reading_values(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -205,6 +210,73 @@ class RuntimeConfigTests(unittest.TestCase):
             self.assertTrue(rows[0]["watched"])
             self.assertTrue(rows[0]["secrets"][0]["configured"])
             self.assertNotIn("redacted", repr(rows))
+
+    def test_applied_roots_come_from_the_shared_project_layout_helper(self) -> None:
+        """Setup must report the root the rest of the app resolves, not a
+        second copy of the env lookup."""
+        with tempfile.TemporaryDirectory() as tmp:
+            projects_root = Path(tmp) / "projects"
+            state_root = Path(tmp) / "state"
+            state_root.mkdir()
+            env = {
+                "XO_PROJECTS_ROOT": str(projects_root),
+                "QUIRQ_STATE_ROOT": str(state_root),
+            }
+            for stale in ("QUIRQ_HOST_PROJECTS_ROOT", "QUIRQ_HOST_STATE_ROOT"):
+                os.environ.pop(stale, None)
+            with patch.dict(os.environ, env, clear=False):
+                from services.cowork_agent.project_layout import xo_projects_root
+
+                applied = runtime_config.applied_roots()
+                self.assertEqual(
+                    applied["xo_projects_root"],
+                    str(xo_projects_root()),
+                )
+                # Nothing saved yet: configured mirrors applied, no restart.
+                status = runtime_config.root_settings()
+                self.assertFalse(status["change_required"])
+                self.assertTrue(status["applied_on_restart"])
+                self.assertFalse(runtime_config.roots_restart_required())
+
+    def test_saved_root_marks_a_restart_and_survives_symlinked_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            real = Path(tmp) / "real-projects"
+            real.mkdir()
+            link = Path(tmp) / "linked-projects"
+            link.symlink_to(real, target_is_directory=True)
+            state_root = Path(tmp) / "state"
+            state_root.mkdir()
+            for stale in ("QUIRQ_HOST_PROJECTS_ROOT", "QUIRQ_HOST_STATE_ROOT"):
+                os.environ.pop(stale, None)
+            env = {
+                "XO_PROJECTS_ROOT": str(link),
+                "QUIRQ_STATE_ROOT": str(state_root),
+            }
+            with patch.dict(os.environ, env, clear=False):
+                # Saving the symlinked spelling of the root in use is not a
+                # change: xo_projects_root() resolves, the Setup field does not.
+                runtime_config.save_root_settings(
+                    {
+                        "xo_projects_root": str(link),
+                        "quirq_state_root": str(state_root),
+                    }
+                )
+                self.assertFalse(runtime_config.root_settings()["change_required"])
+                self.assertNotIn("roots", runtime_config.restart_reasons())
+
+                # A genuinely different root is a restart reason, because
+                # startup reads roots.env (see server.py).
+                elsewhere = Path(tmp) / "other-projects"
+                runtime_config.save_root_settings(
+                    {
+                        "xo_projects_root": str(elsewhere),
+                        "quirq_state_root": str(state_root),
+                    }
+                )
+                status = runtime_config.root_settings()
+                self.assertTrue(status["change_required"])
+                self.assertEqual(status["configured"]["xo_projects_root"], str(elsewhere))
+                self.assertIn("roots", runtime_config.restart_reasons())
 
     def test_watcher_can_load_every_manifest_source(self) -> None:
         manifests = [
