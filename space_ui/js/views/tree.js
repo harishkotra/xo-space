@@ -1,6 +1,6 @@
 /* Tree — the third Files lens, beside List and Graph.
 
-   Same data as the Graph (data/space.json: every project, every mapped
+   Same data as the Graph (.xo/space.json: every project, every mapped
    folder, every mapped file), read as a hierarchy instead of as a force
    layout. The graph answers "what is near what"; this answers "what is
    in there", which is the question a file tree is actually good at.
@@ -17,7 +17,7 @@
    views never import each other (see the registry contract), the payload
    is cached server-side for 30s, and apiFetch single-flights concurrent
    GETs — so the second reader costs nothing. */
-import {apiFetch} from '../core/api.js';
+import {API_BASE,apiFetch} from '../core/api.js';
 
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
@@ -108,7 +108,7 @@ function build(data){
 
 async function load(){
   loading=true;
-  const res=await apiFetch('data/space.json');
+  const res=await apiFetch(API_BASE+'/xo/space.json');
   loading=false;
   if(!res.ok){
     root.querySelector('.tv').innerHTML=

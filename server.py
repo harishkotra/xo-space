@@ -797,7 +797,9 @@ for _r in cowork_agent_routers:
 
 # Space: local workspace knowledge graph (static UI + server control widget).
 from routers.space import router as space_router, mount_space
+from routers.xo_data import router as xo_data_router
 app.include_router(space_router)
+app.include_router(xo_data_router)
 mount_space(app)
 
 # =============================================================================

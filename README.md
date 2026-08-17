@@ -334,6 +334,10 @@ xo-space/
 │   │   └── helpers.py project_layout.py skill_installer.py providers_status_lib.py …
 │   ├── usage_sync.py             daily background → /usage/report on swarm
 │   └── xo_manifest.py            builds ~/xo-projects/.xo/xo.json (capabilities + live status)
+│
+│   Space's own data is one document: ~/xo-projects/.xo/workspace.json holds the
+│   graph, dashboard and session-telemetry views. The watcher materialises it;
+│   /space/data/*.json read it and rebuild only when a view is missing or stale.
 ├── cowork-api.sh                   process manager (start|stop|restart|status|logs)
 ├── cowork-update.sh                git pull + restart in background
 ├── DEVELOPING.md                   engineering guide — architecture, adding an agent, validation

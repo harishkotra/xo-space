@@ -314,7 +314,7 @@ class SpaceWikiTests(unittest.TestCase):
             for lens in ("projects", "graph", "tree"):
                 self.assertIn(f'data-files-lens="{lens}"', source)
         # it reads the same dataset as the Graph
-        self.assertIn("data/space.json", tree)
+        self.assertIn("/xo/space.json", tree)
         # clicking a file previews it; it must not navigate. The Graph
         # hand-off lives in the previewer, as an explicit button.
         self.assertIn("space:preview-file", tree)
@@ -443,7 +443,7 @@ class SpaceWikiTests(unittest.TestCase):
 
         # counts come from the one cached dataset, never per project
         self.assertIn("workspaceCounts", projects)
-        self.assertIn("data/space.json", workspace)
+        self.assertIn("/xo/space.json", workspace)
         # live + last-active come from the workspace-scope endpoints
         self.assertIn("/api/xo-projects/activity", projects)
         self.assertIn("/api/xo-projects/timeline?limit=", projects)

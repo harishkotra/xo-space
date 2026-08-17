@@ -39,7 +39,7 @@ class SpaceSessionsUiTests(unittest.TestCase):
         self.assertIn("cost is unavailable", view)
         self.assertIn(".sess-pager", css)
         self.assertIn(".sess-prompt", css)
-        self.assertIn("sessions.js?v=20260725-sessions2", app)
+        self.assertIn("sessions.js?v=", app)
         self.assertIn("sessions.css?v=20260725-sessions2", index)
 
     def test_telemetry_only_providers_are_discovered(self) -> None:

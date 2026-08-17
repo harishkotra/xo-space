@@ -50,6 +50,7 @@ from services.cowork_agent.visualizer.workspace import (
 )
 from services.cowork_agent.visualizer.workspace import (
     workspace_json,
+    views as ws_views,
 )
 from services.cowork_agent.visualizer.workspace_index import list_project_ids
 
@@ -189,10 +190,13 @@ class Watcher:
             except Exception:
                 logger.exception("activity sink failed for %s", pid)
 
-        # 6. Workspace tier — re-aggregate every tick (cheap; small
-        # JSON files). Timeline is append-only and handled in step 4.
+        # 6. Workspace tier — re-aggregated every tick. All of these are
+        # cheap (small JSON, one iterdir) except ws_views, which walks every
+        # mapped file in the workspace and therefore throttles itself to
+        # XO_VIEWS_REFRESH_S. Timeline is append-only, handled in step 4.
         try:
             workspace_json.apply()
+            ws_views.apply()   # self-throttled; the only expensive sink here
             ws_stats.apply()
             ws_activity.apply()
             ws_sessionslist.apply()

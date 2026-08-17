@@ -1,7 +1,7 @@
 /* Workspace-wide rollups, in one request.
 
    The Files List needs a file and folder count per project. Asking each
-   project for its tree would be one request per row; `data/space.json` — the
+   project for its tree would be one request per row; `.xo/space.json` — the
    same bounded, server-cached payload the Graph and Tree lenses read — already
    carries every mapped file as "<project>/<relative path>", so the whole
    column costs one fetch no matter how many projects there are.
@@ -13,10 +13,10 @@
    the workspace total (`totalsCapped`) — a single workspace-wide flag would
    put a "+" on an 18-file project the moment some other project filled the
    graph, which is worse than showing no number at all. */
-import {apiFetch} from './api.js';
+import {API_BASE,apiFetch} from './api.js';
 
 export async function workspaceCounts(){
-  const res=await apiFetch('data/space.json');
+  const res=await apiFetch(API_BASE+'/xo/space.json');
   if(!res.ok)return{ok:false,error:res.error,offline:res.offline,byProject:new Map(),
     totals:{projects:0,files:0,folders:0}};
 

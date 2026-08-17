@@ -288,8 +288,15 @@ def _project_id_from_category(category: str) -> str:
     return category[2:] if category.startswith("p_") else category
 
 
-def build_categorized_graph() -> dict:
-    source = build_space_data()
+def build_categorized_graph(source: dict | None = None) -> dict:
+    """Collapse the space graph into the five purpose categories.
+
+    ``source`` lets a caller that has already built the graph hand it over —
+    the workspace document builds both views from one scan. Passing ``None``
+    keeps the original standalone behaviour.
+    """
+    if source is None:
+        source = build_space_data()
     source_groups = source.get("groups") or []
     source_leaves = source.get("leaves") or []
 

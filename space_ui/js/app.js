@@ -4,13 +4,13 @@
 import {registerView,startRegistry} from './core/registry.js?v=20260813-timeline2';
 import {initServerWidget} from './core/server-widget.js';
 import {initPreview} from './core/preview.js?v=20260816-preview1';
-import {dashboardView,graphView,timeView} from './views/atlas.js?v=20260816-preview1';
-import sessionsView from './views/sessions.js?v=20260725-sessions2';
+import {dashboardView,graphView,timeView} from './views/atlas.js?v=20260817-xodata1';
+import sessionsView from './views/sessions.js?v=20260817-xodata1';
 import projectsView from './views/projects.js?v=20260817-a11y1';
-import treeView from './views/tree.js?v=20260817-tree3';
+import treeView from './views/tree.js?v=20260817-xodata1';
 /* Chat is deliberately hidden from the tab bar: re-import ./views/chat.js
    and register it below to bring the tab back. */
-import wikiView from './views/wiki.js?v=20260817-files3';
+import wikiView from './views/wiki.js?v=20260817-wikifix1';
 import quirqView from './views/quirq.js?v=20260816-navswap1';
 import secretsView from './views/secrets.js?v=20260816-navswap1';
 

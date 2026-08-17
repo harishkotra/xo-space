@@ -4,8 +4,8 @@
    inside one boot() closure, so they live in one module exporting three
    views (splitting them would force cross-imports, which the view contract
    forbids). Cross-view jumps go through ctx.switchTo (`go`). All graph
-   content comes from ./data/space.json; nothing is embedded here; the data
-   lives on disk, next to this page. */
+   content comes from the workspace's .xo/space.json, served at /xo/space.json;
+   nothing is embedded here. */
 import {API_BASE,apiFetch} from '../core/api.js';
 import {toast} from '../core/ui.js';
 
@@ -28,8 +28,8 @@ addEventListener('space:focus-project',e=>{
 });
 
 const DATASETS={
-  dashboard:{url:'data/dashboard.json',label:'Dashboard'},
-  graph:{url:'data/space.json',label:'Graph'}
+  dashboard:{url:API_BASE+'/xo/dashboard.json',label:'Dashboard'},
+  graph:{url:API_BASE+'/xo/space.json',label:'Graph'}
 };
 const DATASET_KEY='space.atlasDataset';
 
@@ -75,7 +75,7 @@ function renderNoData(el,dataset){
   box.className='nodata';
   box.innerHTML='<div class="eyebrow">No data source</div>'+
     '<h1>Space reads its map from a local file.</h1>'+
-    '<p>This page loads <b>'+source.url+'</b> from this local server, so the data stays on this machine. Serve the folder with the workspace server:</p>'+
+    '<p>This page loads <b>'+source.url+'</b> — a file in the workspace <b>.xo</b> directory — from this local server, so the data stays on this machine. Start the workspace server:</p>'+
     '<pre>cd xo-cowork-api && ./cowork-api.sh start</pre>'+
     '<p>then open <b>http://localhost:5002/space/</b></p>'+
     '<button id="nodata-retry">Retry</button>';
@@ -127,8 +127,8 @@ export const timeView=atlasView('time','Timeline',2,'time','graph');
 
 function boot(DATA,DATA_SOURCE){
 /* ============================== MODEL FROM LOCAL DATA ==============================
-   All graph content comes from ./data/space.json, loaded at the bottom of this file.
-   Nothing is embedded here: the data lives on disk, next to this page. */
+   All graph content comes from .xo/space.json (GET /xo/space.json); nothing is
+   embedded here. */
 const CAT=DATA.categories;
 const ACCENT='#a8d94f', ACCENT_DEEP='#83d63a';
 const graphRoute=bootDataset==='dashboard'?'dashboard':'graph';
