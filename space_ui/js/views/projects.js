@@ -239,11 +239,6 @@ function summary(shown){
 }
 function head(n){
   return'<div class="prj-head">'
-    +'<div class="atlas-lens-switch fileslens-list" aria-label="Files lens">'
-      +'<button class="is-on" type="button" data-files-lens="projects">List</button>'
-      +'<button type="button" data-files-lens="graph">Graph</button>'
-      +'<button type="button" data-files-lens="tree">Tree</button>'
-    +'</div>'
     +'<span class="prj-eyebrow" id="prj-count">'+esc(summary(n))+'</span>'
     +'<span class="prj-spacer"></span>'
     +'<input class="tv-filter" id="prj-filter" placeholder="Filter projects…" '
@@ -315,8 +310,6 @@ let fdeb=null;
 function bindHead(){
   const r=root.querySelector('#prj-refresh');
   if(r)r.addEventListener('click',loadList);
-  root.querySelectorAll('[data-files-lens]').forEach(b=>
-    b.addEventListener('click',()=>switchTo(b.dataset.filesLens)));
   root.querySelectorAll('[data-sort]').forEach(b=>
     b.addEventListener('click',()=>{sortK=b.dataset.sort;syncSortUI();renderRows();}));
   const f=root.querySelector('#prj-filter');

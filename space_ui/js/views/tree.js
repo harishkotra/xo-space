@@ -27,7 +27,9 @@ const ROW_H=34;    /* a container chip */
 const FILE_H=20;   /* a row in a leaf stack */
 const STACK_PAD=13;/* the leaf card's own padding */
 const GAP=7;       /* between sibling blocks */
-const PAD_X=24,PAD_Y=24;
+/* The left gutter is the scroll pane's padding (it matches the centred
+   header), so the surface itself starts at zero. */
+const PAD_X=0,PAD_Y=24;
 /* A folder's files show a dozen at a time. The old cap of 40 made one folder
    800px tall, which is what pushed its siblings into the far distance and
    left the big vertical voids. */
@@ -227,11 +229,6 @@ function render(){
 }
 function head(){
   return'<div class="tv-head">'
-    +'<div class="atlas-lens-switch fileslens-list" aria-label="Files lens">'
-      +'<button type="button" data-files-lens="projects">List</button>'
-      +'<button type="button" data-files-lens="graph">Graph</button>'
-      +'<button class="is-on" type="button" data-files-lens="tree">Tree</button>'
-    +'</div>'
     +'<span class="prj-eyebrow">'+model.dirs.size+' projects · '
       +model.nDirs+' folders · '+model.nFiles+' files</span>'
     +'<span class="prj-spacer"></span>'
@@ -293,8 +290,6 @@ function stackBlock(s,fresh){
    hand-off lives inside the previewer, so browsing the tree never costs you
    your place in it. */
 function onClick(e){
-  const lens=e.target.closest('[data-files-lens]');
-  if(lens){go(lens.dataset.filesLens);return;}
   const act=e.target.closest('[data-tv]');
   if(act){
     if(act.dataset.tv==='projects'){open=new Set(['']);expandedStacks.clear();render();}

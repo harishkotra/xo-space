@@ -14,13 +14,10 @@ const hooks={};  /* boot() assigns lifecycle hooks here once it has run */
 let bootPromise=null;
 let bootDataset=null;
 
-/* Files lens pill (Graph | List): static markup in #view-graph; the List
-   half of the pill lives in the projects view. Cross-lens focus: the List's
-   "Map" action dispatches space:focus-project; if the graph has not booted
-   yet the request is parked until boot consumes it. */
-document.querySelectorAll('[data-files-lens]').forEach(button=>{
-  button.addEventListener('click',()=>go(button.dataset.filesLens));
-});
+/* Cross-lens focus: the List's "Map" action and the previewer's Graph button
+   dispatch space:focus-project; if the graph has not booted yet the request is
+   parked until boot consumes it. (The lens switch itself is shell chrome —
+   core/lens-switch.js — so it cannot move when the lens changes.) */
 let pendingFocus=null;
 addEventListener('space:focus-project',e=>{
   pendingFocus=String(e.detail||'');
@@ -113,17 +110,6 @@ export const graphView={
    as broken. Arriving from Dashboard costs one dataset-switch reload, the
    same hop Dashboard ↔ Files already makes. */
 export const timeView=atlasView('time','Timeline',2,'time','graph');
-/* The Graph|List pill belongs to Files only; Dashboard shares the canvas
-   section but is its own tab, so it hides the pill. */
-{
-  const pill=()=>document.getElementById('fileslens-graph');
-  const wrapShow=(view,visible)=>{
-    const shown=view.show;
-    view.show=()=>{if(shown)shown();const p=pill();if(p)p.hidden=!visible;};
-  };
-  wrapShow(graphView,true);
-  wrapShow(dashboardView,false);
-}
 
 function boot(DATA,DATA_SOURCE){
 /* ============================== MODEL FROM LOCAL DATA ==============================
@@ -1319,9 +1305,11 @@ const fileLanes=()=>Object.keys(CAT).filter(cat=>LEAVES.some(n=>n.cat===cat&&n.d
 function coverageNote(){
   const total=Object.keys(CAT).length;
   const shown=(tMode==='project'?histLanes:fileLanes()).length;
-  const missing=total-shown;
-  if(!total||missing<=0)return'';
-  return ` Showing ${shown} of ${total} project${total===1?'':'s'}: ${missing} ${missing===1?'has':'have'} no git history to date (dates come from commits only).`;
+  const blank=total-shown;
+  if(!total||blank<=0)return'';
+  /* Every project has a lane now, so this counts the empty ones rather than
+     claiming a subset is "shown" — the dark columns are visible evidence. */
+  return ` ${blank} of ${total} project${total===1?'':'s'} ${blank===1?'has':'have'} no git history to plot; their lanes are dark.`;
 }
 const TMODE_KEY='space.timelineMode';
 let tMode='file';
@@ -1393,8 +1381,15 @@ function buildTimeline(){
   histDots=[];
   /* Only lanes with something to plot: projects whose files are all undated
      (nothing committed) would render as dead empty columns. */
-  const lanes=tMode==='project'?histLanes
-    :Object.keys(CAT).filter(cat=>LEAVES.some(n=>n.cat===cat&&n.date));
+  /* Every project gets a lane, including the ones with nothing to plot.
+     Dropping them made the Timeline disagree with Files about how many
+     projects exist, and a reader cannot tell "no history" from "missing".
+     An empty lane is drawn dark and labelled instead. */
+  const allLanes=Object.keys(CAT);
+  const hasData=cat=>tMode==='project'
+    ?(GITHIST[cat]||[]).length>0
+    :LEAVES.some(n=>n.cat===cat&&n.date);
+  const lanes=allLanes;
   const colW=(W-64-16)/Math.max(1,lanes.length);
   /* Time runs vertically: newest at the top, oldest at the bottom. Narrow
      columns rotate their headers, which needs a taller top margin. */
@@ -1407,7 +1402,15 @@ function buildTimeline(){
     const band=document.createElementNS(SVGNS,'rect');
     band.setAttribute('x',x+2);band.setAttribute('y',M.t-6);
     band.setAttribute('width',Math.max(2,colW-4));band.setAttribute('height',H-M.t-M.b+12);
-    band.setAttribute('fill',hexA(CAT[cat].color,.04));band.setAttribute('rx',8);
+    const live=hasData(cat);
+    /* darker than the workspace background, so an empty lane reads as a
+       deliberate blank rather than as a gap in the layout */
+    band.setAttribute('fill',live?hexA(CAT[cat].color,.04):'rgba(0,0,0,.22)');
+    band.setAttribute('rx',8);
+    if(!live){
+      band.setAttribute('stroke','rgba(233,228,217,.05)');
+      band.setAttribute('stroke-dasharray','2 4');
+    }
     tsvg.appendChild(band);
     const name=CAT[cat].name;
     const label=name.length>18?name.slice(0,17)+'…':name;
@@ -1417,15 +1420,24 @@ function buildTimeline(){
       lb.setAttribute('x',ax);lb.setAttribute('y',ay);
       lb.setAttribute('text-anchor','start');
       lb.setAttribute('transform',`rotate(-40 ${ax} ${ay})`);
-      lb.setAttribute('style',`font:italic 500 10.5px ${SERIF};fill:${hexA(CAT[cat].color,.95)}`);
+      lb.setAttribute('style',`font:italic 500 10.5px ${SERIF};fill:${live?hexA(CAT[cat].color,.95):'rgba(125,120,109,.85)'}`);
     }else{
       lb.setAttribute('x',x+colW/2);lb.setAttribute('y',M.t-14);
       lb.setAttribute('text-anchor','middle');
-      lb.setAttribute('style',`font:italic 500 13px ${SERIF};fill:${hexA(CAT[cat].color,.95)}`);
+      lb.setAttribute('style',`font:italic 500 13px ${SERIF};fill:${live?hexA(CAT[cat].color,.95):'rgba(125,120,109,.85)'}`);
     }
     lb.textContent=label;
     tsvg.appendChild(lb);
-    if(tMode==='project'){
+    if(!live){
+      /* one line, centred in the empty column, saying why it is empty */
+      const why=document.createElementNS(SVGNS,'text');
+      why.setAttribute('x',x+colW/2);why.setAttribute('y',(M.t+H-M.b)/2);
+      why.setAttribute('text-anchor','middle');
+      why.setAttribute('style',`font:400 8.5px ${MONO};letter-spacing:.1em;fill:#56534b`);
+      why.textContent=colW>=104?'NO GIT HISTORY':colW>=64?'NO HISTORY':'—';
+      tsvg.appendChild(why);
+    }
+    if(tMode==='project'&&live){
       const total=(GITHIST[cat]||[]).reduce((sum,day)=>sum+day.n,0);
       const sub=document.createElementNS(SVGNS,'text');
       sub.setAttribute('x',x+colW/2);sub.setAttribute('y',H-4);
