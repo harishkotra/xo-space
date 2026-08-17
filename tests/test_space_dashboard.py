@@ -159,7 +159,7 @@ class DashboardUiTests(unittest.TestCase):
             "atlasView('dashboard','Dashboard',0,'graph','dashboard')", atlas
         )
         self.assertIn("section:'graph'", atlas)
-        self.assertIn("data/dashboard.json", atlas)
+        self.assertIn("/xo/dashboard.json", atlas)
         self.assertIn("clusters:l.clusters||[]", atlas)
         self.assertIn("function drawEnclosures(k)", atlas)
         self.assertIn("if(DATA.meta.enclose)drawEnclosures(k)", atlas)
@@ -169,13 +169,20 @@ class DashboardUiTests(unittest.TestCase):
         self.assertIn("const activeSection=v.section||v.id", registry)
 
     def test_dashboard_route_is_registered_before_the_static_mount(self) -> None:
-        router = (ROOT / "routers" / "space.py").read_text(encoding="utf-8")
-        self.assertIn('@router.get("/data/dashboard.json")', router)
-        self.assertIn("build_categorized_graph", router)
-        self.assertLess(
-            router.index('@router.get("/data/dashboard.json")'),
-            router.index("def mount_space(app)"),
-        )
+        router = (ROOT / "routers" / "xo_data.py").read_text(encoding="utf-8")
+        self.assertIn('@router.get("/dashboard.json")', router)
+        # The route serves the view out of the workspace document rather than
+        # calling the builder itself; the builder is reached only through the
+        # document's rebuild path.
+        self.assertIn("views.read", router)
+        self.assertIn('APIRouter(prefix="/xo"', router)
+        document = (
+            ROOT / "services" / "cowork_agent" / "visualizer" / "workspace"
+            / "views.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("build_categorized_graph", document)
+        # one scan feeds both projections
+        self.assertIn("build_categorized_graph(source=space)", document)
 
 
 if __name__ == "__main__":

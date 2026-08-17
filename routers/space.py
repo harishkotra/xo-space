@@ -1,11 +1,11 @@
 """Space: the local workspace knowledge graph.
 
-Serves the Space folder (graph UI + its data/space.json) as static files under
-/space, plus a tiny control API the UI uses for its server on/off widget.
+Serves the Space UI folder as static files under /space, plus a tiny control
+API the UI uses for its server on/off widget and the Setup tab's self-update.
 
-The folder location comes from SPACE_DIR (env), defaulting to the xo-atlas
-folder in the ClaudeWorkspace. Data never leaves this machine: the UI reads
-data/space.json from this mount. See <SPACE_DIR>/README.md for the format.
+The folder location comes from SPACE_DIR (env), defaulting to space_ui/ in the
+repo. The UI's DATA comes from the workspace .xo directory via /xo/*.json
+(routers/xo_data.py), not from this mount.
 """
 
 import asyncio
@@ -15,16 +15,8 @@ import time
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-
-from services.cowork_agent.visualizer.categorized_graph import (
-    build_categorized_graph,
-)
-from services.cowork_agent.visualizer.session_telemetry import (
-    build_session_telemetry,
-)
-from services.cowork_agent.visualizer.space_index import build_space_data
 
 # Bundled UI (space_ui/ at the repo root); SPACE_DIR env var overrides, e.g.
 # to point at a live xo-atlas checkout during UI development.
@@ -111,104 +103,11 @@ async def space_update_apply(request: Request):
 
 SPACE_CACHE_TTL = float(os.getenv("SPACE_CACHE_TTL", "30"))
 
-# (built_at_monotonic, payload) — module-level; refreshed when older than TTL.
-_data_cache: tuple[float, dict] | None = None
-
-
-@router.get("/data/space.json")
-async def space_data():
-    """The Space graph, generated live from ~/xo-projects.
-
-    Registered before the static mount (see server.py include order), so it
-    shadows <SPACE_DIR>/data/space.json. Falls back to that file when the
-    builder fails; 503 when there is no fallback either."""
-    global _data_cache
-    now = time.monotonic()
-    if _data_cache is not None and now - _data_cache[0] < SPACE_CACHE_TTL:
-        return JSONResponse(_data_cache[1], headers={"Cache-Control": "no-store"})
-
-    try:
-        data = build_space_data()
-    except Exception as exc:
-        print(f"⚠️ space_index failed ({exc}); falling back to static space.json")
-        static = SPACE_DIR / "data" / "space.json"
-        if static.is_file():
-            return FileResponse(static, media_type="application/json",
-                                headers={"Cache-Control": "no-store"})
-        raise HTTPException(
-            status_code=503,
-            detail={"code": "projects_root_unavailable",
-                    "message": "Could not build the graph and no static fallback exists."},
-        )
-
-    _data_cache = (now, data)
-    return JSONResponse(data, headers={"Cache-Control": "no-store"})
-
-
-# Categorized Dashboard graph. It has the same schema as space.json, so the
-# browser reuses the atlas renderer instead of maintaining a second graph UI.
-_dashboard_cache: tuple[float, dict] | None = None
-
-
-@router.get("/data/dashboard.json")
-async def dashboard_data():
-    """XO projects collapsed into five purpose categories."""
-    global _dashboard_cache
-    now = time.monotonic()
-    if (
-        _dashboard_cache is not None
-        and now - _dashboard_cache[0] < SPACE_CACHE_TTL
-    ):
-        return JSONResponse(
-            _dashboard_cache[1], headers={"Cache-Control": "no-store"}
-        )
-
-    try:
-        data = await asyncio.to_thread(build_categorized_graph)
-    except Exception as exc:
-        print(f"⚠️ categorized graph failed ({exc})")
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "code": "categorized_graph_unavailable",
-                "message": "Could not build the categorized project graph.",
-            },
-        )
-
-    _dashboard_cache = (now, data)
-    return JSONResponse(data, headers={"Cache-Control": "no-store"})
-
-
-# Session telemetry — second Space dataset. Same TTL, separate cache slot.
-_argus_cache: tuple[float, dict] | None = None
-
-
-@router.get("/data/sessions.json")
-async def sessions_data():
-    """All locally available session telemetry for the Sessions tab.
-
-    Providers fail independently: one readable source still yields a useful
-    response with source-status metadata. No static fallback: a truthful 503
-    when every provider is unavailable beats stale data."""
-    global _argus_cache
-    now = time.monotonic()
-    if _argus_cache is not None and now - _argus_cache[0] < SPACE_CACHE_TTL:
-        return JSONResponse(_argus_cache[1], headers={"Cache-Control": "no-store"})
-
-    try:
-        data = await asyncio.to_thread(build_session_telemetry)
-    except Exception as exc:
-        print(f"⚠️ session telemetry failed ({exc})")
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "code": "session_telemetry_unavailable",
-                "message": "No session telemetry source is currently available.",
-            },
-        )
-    _argus_cache = (now, data)
-    return JSONResponse(data, headers={"Cache-Control": "no-store"})
-
+# The graph, dashboard and session-telemetry payloads used to be generated
+# here and served from /space/data/. They are files in the workspace .xo
+# directory now, served by routers/xo_data.py at /xo/*.json — one location on
+# disk, one URL that mirrors it. Only session_prompts stays: it is a
+# per-session lookup, not a workspace file.
 
 # Aggregate telemetry never contains prompt text. Session details request one
 # transcript lazily through its provider's optional capability.

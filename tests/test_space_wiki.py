@@ -109,7 +109,9 @@ class SpaceWikiTests(unittest.TestCase):
         # Graph and Projects merged into one Files tab that lands on the
         # List lens; the Graph is the nav-less second lens behind the pill.
         # The dept-filter chips row is gone from the canvas.
-        self.assertIn('id="fileslens-graph"', index)
+        # the lens switch is one element in the shell, not a copy per lens
+        self.assertIn('id="fileslens"', index)
+        self.assertNotIn('fileslens-graph', index)
         self.assertNotIn('id="chips"', index)
         self.assertIn("nav:false,parent:'projects'", atlas)
         projects = (
@@ -309,12 +311,23 @@ class SpaceWikiTests(unittest.TestCase):
         self.assertIn("id:'tree',label:'Tree'", contract)
         self.assertIn("nav:false", contract)
         self.assertIn("parent:'projects'", contract)
-        # every surface that renders the pill offers the same three lenses
-        for source in (index, projects, tree):
-            for lens in ("projects", "graph", "tree"):
-                self.assertIn(f'data-files-lens="{lens}"', source)
+        # One renderer, one position. Three copies in three containers is
+        # what made the control jump when you used it, so the views must not
+        # render it at all.
+        for lens in ("projects", "graph", "tree"):
+            self.assertIn(f'data-files-lens="{lens}"', index)
+        for source in (projects, tree):
+            self.assertNotIn('data-files-lens="', source)
+        switcher = (
+            ROOT / "space_ui" / "js" / "core" / "lens-switch.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn("space:view", switcher)
+        registry = (
+            ROOT / "space_ui" / "js" / "core" / "registry.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn("space:view", registry)
         # it reads the same dataset as the Graph
-        self.assertIn("data/space.json", tree)
+        self.assertIn("/xo/space.json", tree)
         # clicking a file previews it; it must not navigate. The Graph
         # hand-off lives in the previewer, as an explicit button.
         self.assertIn("space:preview-file", tree)
@@ -443,7 +456,7 @@ class SpaceWikiTests(unittest.TestCase):
 
         # counts come from the one cached dataset, never per project
         self.assertIn("workspaceCounts", projects)
-        self.assertIn("data/space.json", workspace)
+        self.assertIn("/xo/space.json", workspace)
         # live + last-active come from the workspace-scope endpoints
         self.assertIn("/api/xo-projects/activity", projects)
         self.assertIn("/api/xo-projects/timeline?limit=", projects)

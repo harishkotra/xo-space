@@ -1,12 +1,12 @@
 /* Sessions tab — multi-runtime telemetry dashboard (data: GET
-   data/sessions.json, pre-aggregated by the API). Independent of the atlas:
+   /xo/sessions.json, pre-aggregated by the API). Independent of the atlas:
    own lazy fetch on
    first activation, own error handling — a graph-data failure cannot take
    this tab down, and vice versa. (The old fallbackView/window.__switchView
    dance is gone: the registry keeps tabs switchable no matter which views
    are broken.) Window filtering happens here, client-side, over per-day
    rollups. */
-import {apiFetch} from '../core/api.js';
+import {API_BASE,apiFetch} from '../core/api.js';
 
 let _open=null;
 
@@ -58,7 +58,7 @@ async function load(){
      must not be blamed on a native telemetry store. For HTTP errors the API's
      own explanation is surfaced
      instead of a bare status code. */
-  const res=await apiFetch('data/sessions.json');
+  const res=await apiFetch(API_BASE+'/xo/sessions.json');
   loading=false;
   if(res.ok){
     SD=res.data;
@@ -156,13 +156,13 @@ function drawBars(host,items){
 
 /* ---- render dispatcher ---- */
 function render(){
-  if(loading){wrap.innerHTML='<div class="sess-note">loading data/sessions.json…</div>';return;}
+  if(loading){wrap.innerHTML='<div class="sess-note">loading .xo/sessions.json…</div>';return;}
   if(failed){
     const off=failed==='\x00offline';
     wrap.innerHTML='<div class="sess-err">'+(off
       ?'<b>xo-cowork-api is unreachable</b> — the request never reached the server '
         +'(stopped or restarting; the footer pill tracks it). Not a telemetry-source problem. '
-      :'<b>Could not load data/sessions.json</b> ('+esc(failed)+'). '
+      :'<b>Could not load .xo/sessions.json</b> ('+esc(failed)+'). '
         +'The API reads local telemetry for each runtime (Claude Code: <b>ARGUS_DB</b>; Codex: <b>CODEX_HOME</b>; Cursor: <b>CURSOR_HOME</b>). ')
       +'<button class="sess-refresh" id="sess-retry">Retry</button></div>';
     document.getElementById('sess-retry').addEventListener('click',load);return;

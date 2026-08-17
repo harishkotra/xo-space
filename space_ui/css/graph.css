@@ -2,8 +2,14 @@
   .ov{position:absolute;z-index:10;pointer-events:none}
   .ov>*{pointer-events:auto}
   /* Files lens pill (List | Graph) at the top left */
-  .fileslens{top:16px;left:18px}
-  .fileslens[hidden]{display:none}
+  /* The lens switch is shell chrome: one element in #stage, at one position,
+     over whichever Files lens is showing. It never re-renders on a switch. */
+  #fileslens{position:absolute;top:0;left:0;right:0;z-index:14;padding:22px 0 0;
+    pointer-events:none}
+  #fileslens[hidden]{display:none}
+  .fileslens-inner{max-width:1180px;margin:0 auto;padding:0 26px;
+    display:flex;align-items:center}
+  #fileslens .atlas-lens-switch{pointer-events:auto}
   #hint{top:52px;left:18px;max-width:430px;font-size:11.5px;line-height:1.65;color:var(--ink-3);transition:opacity .5s var(--ease)}
   #hint b{color:var(--ink-2);font-weight:500}
   /* wrap: with dozens of generated projects a single row would overflow the

@@ -5,11 +5,11 @@
 </head><body>
 <link rel="stylesheet" href="css/base.css?v=20260817-a11y1">
 <link rel="stylesheet" href="css/stage.css?v=20260813-wikisetup1">
-<link rel="stylesheet" href="css/graph.css?v=20260816-todos1">
+<link rel="stylesheet" href="css/graph.css?v=20260817-lens1">
 <link rel="stylesheet" href="css/sessions.css?v=20260725-sessions2">
 <link rel="stylesheet" href="css/timeline.css?v=20260813-timeline2">
 <link rel="stylesheet" href="css/chrome.css?v=20260813-timeline2">
-<link rel="stylesheet" href="css/projects.css?v=20260817-a11y1">
+<link rel="stylesheet" href="css/projects.css?v=20260817-lens1">
 <link rel="stylesheet" href="css/wiki.css?v=20260725-collaboration1">
 <link rel="stylesheet" href="css/quirq.css?v=20260816-navswap1">
 <link rel="stylesheet" href="css/secrets.css?v=20260813-update1">
@@ -47,14 +47,22 @@
 </div>
 
 <main id="stage">
+  <!-- Files lens switch: one element for all three lenses, owned by
+       core/lens-switch.js. It sits in the stage rather than inside a view so
+       that switching lens cannot move it. -->
+  <div id="fileslens" hidden>
+    <div class="fileslens-inner">
+      <div class="atlas-lens-switch" role="group" aria-label="Files lens">
+        <button type="button" data-files-lens="projects">List</button>
+        <button type="button" data-files-lens="graph">Graph</button>
+        <button type="button" data-files-lens="tree">Tree</button>
+      </div>
+    </div>
+  </div>
+
   <!-- GRAPH -->
   <section class="view is-active" id="view-graph">
     <canvas id="gcanvas"></canvas>
-    <div class="ov atlas-lens-switch fileslens" id="fileslens-graph" aria-label="Files lens" hidden>
-      <button type="button" data-files-lens="projects">List</button>
-      <button class="is-on" type="button" data-files-lens="graph">Graph</button>
-      <button type="button" data-files-lens="tree">Tree</button>
-    </div>
     <p class="ov" id="hint"><b>Click</b> a node to focus its neighbourhood &middot; <b>Double-click</b> a cluster to open or close it &middot; <b>Drag</b> to reposition &middot; <b>Scroll</b> to zoom</p>
     <div class="ov" id="legend"></div>
     <div class="ov" id="counts"></div>
@@ -138,6 +146,6 @@
   <div class="meta" id="fmeta"></div>
 </footer>
 
-<script type="module" src="js/app.js?v=20260817-a11y1"></script>
+<script type="module" src="js/app.js?v=20260817-lens1"></script>
 
 </body></html>

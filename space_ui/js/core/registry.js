@@ -62,6 +62,10 @@ export async function switchTo(id){
     });
   });
   history.replaceState(null,'','#/'+id);
+  /* Shell chrome (the Files lens switch) needs to know which view is active
+     without importing views. activeTab is the parent for a child view, so a
+     lens and its parent tab report the same tab. */
+  dispatchEvent(new CustomEvent('space:view',{detail:{id,tab:activeTab}}));
   if(prev&&prev.hide){
     try{prev.hide();}catch(err){console.error('view "'+prev.id+'" hide failed:',err);}
   }
