@@ -303,7 +303,8 @@ function configRow(label,value){
 }
 
 function renderTree(items,totals){
-  root.querySelector('#quirq-file-count').textContent=(totals.files||0)+' files · '+(totals.directories||0)+' folders';
+  const nOf=(v,w)=>(v||0)+' '+w+((v||0)===1?'':'s');
+  root.querySelector('#quirq-file-count').textContent=nOf(totals.files,'file')+' · '+nOf(totals.directories,'folder');
   const target=root.querySelector('#quirq-tree');
   if(!items.length){
     target.innerHTML='<div class="quirq-empty">The Quirq state directory is empty or unavailable.</div>';

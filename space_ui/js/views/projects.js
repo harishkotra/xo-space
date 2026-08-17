@@ -231,9 +231,10 @@ function summary(shown){
     files:[...counts.values()].reduce((s,c)=>s+c.files,0),
     folders:[...counts.values()].reduce((s,c)=>s+c.folders,0)};
   const un=(items||[]).filter(p=>p.unscaffolded).length;
-  return t.projects+' projects'
-    +(t.files?' · '+t.files.toLocaleString()+(capped?'+':'')+' files · '
-      +t.folders.toLocaleString()+' folders':'')
+  const n=(v,word)=>v.toLocaleString()+' '+word+(v===1?'':'s');
+  return n(t.projects,'project')
+    +(t.files?' · '+t.files.toLocaleString()+(capped?'+':'')+' file'+(t.files===1?'':'s')
+      +' · '+n(t.folders,'folder'):'')
     +(un?' · '+un+' unscaffolded':'')
     +(shown!==undefined&&shown!==t.projects?' · '+shown+' shown':'');
 }
@@ -331,8 +332,10 @@ function filesCell(p){
   const c=counts.get(p.id);
   if(!c)return'<span class="prj-cell prj-num is-none">—</span>';
   if(!c.files)return'<span class="prj-cell prj-num is-none">no files yet</span>';
-  return'<span class="prj-cell prj-num">'+c.files.toLocaleString()+(c.capped?'+':'')+' files'
-    +(c.folders?'<em>'+c.folders.toLocaleString()+' folders</em>':'')+'</span>';
+  return'<span class="prj-cell prj-num">'
+    +c.files.toLocaleString()+(c.capped?'+':'')+' file'+(c.files===1?'':'s')
+    +(c.folders?'<em>'+c.folders.toLocaleString()+' folder'+(c.folders===1?'':'s')+'</em>':'')
+    +'</span>';
 }
 function whenCell(p){
   const l=live.get(p.id);

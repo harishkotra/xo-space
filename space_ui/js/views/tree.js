@@ -19,6 +19,7 @@
    GETs — so the second reader costs nothing. */
 import {API_BASE,apiFetch} from '../core/api.js';
 
+const plural=(n,word)=>n.toLocaleString()+' '+word+(n===1?'':'s');
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 /* Layout constants, all in px of the (unscaled) tree surface. */
@@ -229,8 +230,8 @@ function render(){
 }
 function head(){
   return'<div class="tv-head">'
-    +'<span class="prj-eyebrow">'+model.dirs.size+' projects · '
-      +model.nDirs+' folders · '+model.nFiles+' files</span>'
+    +'<span class="prj-eyebrow">'+plural(model.dirs.size,'project')+' · '
+      +plural(model.nDirs,'folder')+' · '+plural(model.nFiles,'file')+'</span>'
     +'<span class="prj-spacer"></span>'
     +'<input class="tv-filter" id="tv-filter" placeholder="Filter by name…" '
       +'autocomplete="off" spellcheck="false" value="'+esc(filter)+'">'
