@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from services.cowork_agent.local_state import quirq_state_dir
+from services.cowork_agent.project_layout import xo_projects_root
 from services.cowork_agent.registry.agent_env import load_env_entries
 from services.cowork_agent.registry.agent_registry import all_agents, get_active_agent
 
@@ -190,12 +191,23 @@ def secrets_restart_required() -> bool:
     return _secrets_fingerprint() != _STARTUP_SECRETS_FINGERPRINT
 
 
+def roots_restart_required() -> bool:
+    """Whether saved storage roots differ from the ones now in use.
+
+    Startup reads roots.env, so this is a restart condition like the other
+    two — not an installer-only one.
+    """
+    return bool(root_settings()["change_required"])
+
+
 def restart_reasons() -> list[str]:
     reasons: list[str] = []
     if _runtime_settings_restart_required():
         reasons.append("runtime")
     if secrets_restart_required():
         reasons.append("secrets")
+    if roots_restart_required():
+        reasons.append("roots")
     return reasons
 
 
@@ -333,7 +345,8 @@ def validate_root_settings(payload: dict[str, Any]) -> dict[str, str]:
 def save_root_settings(payload: dict[str, Any]) -> dict[str, str]:
     clean = validate_root_settings(payload)
     text = (
-        "# Managed by Quirq Runtime Setup. Applied by the installer.\n"
+        "# Managed by Quirq Runtime Setup. Read at server startup;\n"
+        "# an exported shell/container value still wins over these.\n"
         f"XO_PROJECTS_ROOT={clean['xo_projects_root']}\n"
         f"QUIRQ_STATE_ROOT={clean['quirq_state_root']}\n"
     )
@@ -341,22 +354,47 @@ def save_root_settings(payload: dict[str, Any]) -> dict[str, str]:
     return clean
 
 
-def root_settings() -> dict[str, Any]:
-    # QUIRQ_HOST_* are the Docker installer's container→host translations and
-    # win when set. Native runs never set them, so fall back to the roots the
-    # process is actually using — otherwise Setup shows empty fields and
-    # "not reported" for an install that is running fine.
-    current = {
+def _same_root(left: str, right: str) -> bool:
+    """Whether two root strings name the same directory.
+
+    ``xo_projects_root()`` resolves symlinks; the Setup tab saves the path
+    the user typed. Comparing the strings alone would leave an install whose
+    home is a symlink permanently stuck on "restart required".
+    """
+    if left == right:
+        return True
+    try:
+        return os.path.realpath(left) == os.path.realpath(right)
+    except OSError:
+        return False
+
+
+def applied_roots() -> dict[str, str]:
+    """The roots this process is actually using.
+
+    Resolved through the same helpers every tab reads from
+    (``xo_projects_root`` / ``quirq_state_dir``) so Setup can never report a
+    root the rest of the app is not using.
+
+    QUIRQ_HOST_* are the Docker installer's container→host translations and
+    win when set. Native runs never set them, so fall back to the real roots
+    — otherwise Setup shows empty fields and "not reported" for an install
+    that is running fine.
+    """
+    return {
         "xo_projects_root": (
             (os.getenv("QUIRQ_HOST_PROJECTS_ROOT", "") or "").strip()
-            or (os.getenv("XO_PROJECTS_ROOT", "") or "").strip()
-            or str(Path("~/xo-projects").expanduser())
+            or str(xo_projects_root())
         ),
         "quirq_state_root": (
             (os.getenv("QUIRQ_HOST_STATE_ROOT", "") or "").strip()
             or str(quirq_state_dir())
         ),
     }
+
+
+def root_settings() -> dict[str, Any]:
+    current = applied_roots()
     saved = _parse_env_file(root_config_file(), ROOT_CONFIG_KEYS)
     configured = {
         "xo_projects_root": saved.get(
@@ -368,10 +406,17 @@ def root_settings() -> dict[str, Any]:
             current["quirq_state_root"],
         ),
     }
+    change_required = not all(
+        _same_root(configured[key], current[key]) for key in current
+    )
     return {
         "applied": current,
         "configured": configured,
-        "change_required": configured != current,
+        "change_required": change_required,
+        # Saved roots are read at startup (server.py), so a plain restart
+        # applies them. The installer command stays for container installs,
+        # where the roots are also bind mounts that only it can remap.
+        "applied_on_restart": True,
         "apply_command": INSTALL_COMMAND,
         "config_file": str(root_config_file()),
     }
@@ -484,9 +529,9 @@ def runtime_sources() -> list[dict[str, Any]]:
 
 
 def runtime_status() -> dict[str, Any]:
-    projects_root = Path(
-        (os.getenv("XO_PROJECTS_ROOT", "") or "").strip() or "~/xo-projects"
-    ).expanduser()
+    # One resolution for the whole app: the same helper the Files, Graph,
+    # Timeline, Chat and Quirq data paths call.
+    projects_root = xo_projects_root()
     state_root = quirq_state_dir()
     configured = configured_settings()
     applied = effective_settings()

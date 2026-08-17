@@ -16,10 +16,14 @@ let timer=null;
 let loading=false;
 let go=()=>{};
 
+/* No top-level tab: Quirq opens from the button in Setup's header (and stays
+   deep-linkable at #/quirq); Setup's tab lights up while it is open. It stays
+   its own view rather than a card inside Setup so its 10s refresh and full
+   state tree keep a page to themselves. */
 export default {
   id:'quirq',
   label:'Quirq',
-  order:8,
+  order:8,nav:false,parent:'secrets',
   async mount(el,ctx){
     root=el;
     go=ctx.switchTo;
@@ -51,7 +55,12 @@ function renderShell(){
           +'<h1>Inside <em>.quirq</em></h1>'
           +'<p>A live, privacy-aware map of installation state, watcher cursors, runtime configuration, credentials, and ephemeral activity.</p>'
         +'</div>'
-        +'<button id="quirq-refresh" type="button">Refresh data</button>'
+        /* This view has no tab of its own — every other control on the page
+           leads further away, so the way home belongs in the hero. */
+        +'<div class="quirq-hero-actions">'
+          +'<button id="quirq-back" type="button" data-go-view="secrets">&#8592; Setup</button>'
+          +'<button id="quirq-refresh" type="button">Refresh data</button>'
+        +'</div>'
       +'</header>'
       +'<section class="quirq-path" id="quirq-path"><div class="quirq-skeleton"></div></section>'
       +'<section class="quirq-metrics" id="quirq-metrics" aria-label="Quirq state metrics"></section>'

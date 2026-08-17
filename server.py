@@ -19,15 +19,47 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 import httpx
 import uvicorn
 from config.models.claude_code import ClaudeCodeClient
 from config.models.codex import CodexCodeClient
 from utils.local_port import LocalPortsUnavailableError, resolve_server_port
 
-# Load environment variables
+# Load environment variables. Keys already exported by the shell (or by
+# docker -e / compose) are recorded first: they outrank every file below,
+# exactly as install.sh orders them.
+_shell_env_keys = frozenset(os.environ)
 load_dotenv()
+
+
+def _load_storage_roots() -> None:
+    """Apply ``<state root>/roots.env`` — the storage roots the Setup tab writes.
+
+    Precedence, mirroring install.sh: shell/container env > roots.env >
+    the checkout's .env. Loading it here is what makes the Setup tab's XO
+    root real for every reader (all of which resolve through
+    ``project_layout.xo_projects_root()``) after a restart, instead of only
+    when the Docker installer is re-run.
+
+    The file is anchored to the state root we can see right now; if it
+    relocates the state root, runtime.env and secrets are then read from the
+    new location.
+    """
+    anchor = Path(
+        (os.getenv("QUIRQ_STATE_ROOT", "") or "").strip() or Path.home() / ".quirq"
+    ).expanduser()
+    try:
+        values = dotenv_values(anchor / "roots.env")
+    except OSError:
+        return
+    for key in ("XO_PROJECTS_ROOT", "QUIRQ_STATE_ROOT"):
+        value = (values.get(key) or "").strip()
+        if value and key not in _shell_env_keys:
+            os.environ[key] = value
+
+
+_load_storage_roots()
 _quirq_state_root = Path(
     (os.getenv("QUIRQ_STATE_ROOT", "") or "").strip() or Path.home() / ".quirq"
 ).expanduser()
@@ -549,6 +581,7 @@ def _write_install_pointer() -> None:
     """
     try:
         from services.cowork_agent.local_state import quirq_state_dir
+        from services.cowork_agent.project_layout import xo_projects_root
 
         config_home = Path(
             os.getenv("XDG_CONFIG_HOME", "").strip() or Path.home() / ".config"
@@ -557,8 +590,7 @@ def _write_install_pointer() -> None:
         pointer_dir.mkdir(parents=True, exist_ok=True)
         pointer = {
             "repo_dir": str(Path(__file__).resolve().parent),
-            "projects_root": os.getenv("XO_PROJECTS_ROOT", "").strip()
-            or str(Path("~/xo-projects").expanduser()),
+            "projects_root": str(xo_projects_root()),
             "state_root": str(quirq_state_dir()),
             "host": os.getenv("HOST", "127.0.0.1"),
             "port": int(os.getenv("PORT", "5002")),

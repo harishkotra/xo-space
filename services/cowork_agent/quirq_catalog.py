@@ -1,6 +1,7 @@
 """Read-only, privacy-aware catalog of machine-local Quirq state.
 
-The catalog powers the local Quirq tab. It deliberately reports structure and
+The catalog powers the local Quirq view, opened from the Setup tab's header
+(deep link ``#/quirq``). It deliberately reports structure and
 operational summaries rather than serving arbitrary files: credential values,
 native session contents, cursor paths, and symlink targets never leave the
 machine-local state service.
@@ -15,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from services.cowork_agent.local_state import quirq_state_dir
+from services.cowork_agent.project_layout import xo_projects_root
 from services.cowork_agent.registry.agent_env import load_env_entries
 from services.cowork_agent.runtime_config import (
     configured_settings,
@@ -306,9 +308,8 @@ def _contract_status(
 
 
 def _project_outputs() -> dict[str, Any]:
-    projects_root = Path(
-        (os.getenv("XO_PROJECTS_ROOT", "") or "").strip() or "~/xo-projects"
-    ).expanduser()
+    # Same root helper as every other tab — see project_layout.
+    projects_root = xo_projects_root()
     host_root = (
         os.getenv("QUIRQ_HOST_PROJECTS_ROOT", "") or ""
     ).strip()

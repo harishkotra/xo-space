@@ -3,16 +3,17 @@
 <title>XO Space</title>
 <style>html{color-scheme:dark}</style>
 </head><body>
-<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/base.css?v=20260817-a11y1">
 <link rel="stylesheet" href="css/stage.css?v=20260813-wikisetup1">
-<link rel="stylesheet" href="css/graph.css?v=20260813-files2">
+<link rel="stylesheet" href="css/graph.css?v=20260816-todos1">
 <link rel="stylesheet" href="css/sessions.css?v=20260725-sessions2">
 <link rel="stylesheet" href="css/timeline.css?v=20260813-timeline2">
 <link rel="stylesheet" href="css/chrome.css?v=20260813-timeline2">
-<link rel="stylesheet" href="css/projects.css?v=20260813-files2">
+<link rel="stylesheet" href="css/projects.css?v=20260817-a11y1">
 <link rel="stylesheet" href="css/wiki.css?v=20260725-collaboration1">
-<link rel="stylesheet" href="css/quirq.css?v=20260725-quirq2">
+<link rel="stylesheet" href="css/quirq.css?v=20260816-navswap1">
 <link rel="stylesheet" href="css/secrets.css?v=20260813-update1">
+<link rel="stylesheet" href="css/preview.css?v=20260816-preview1">
 
 <div class="topbar">
   <div class="brand">
@@ -52,6 +53,7 @@
     <div class="ov atlas-lens-switch fileslens" id="fileslens-graph" aria-label="Files lens" hidden>
       <button type="button" data-files-lens="projects">List</button>
       <button class="is-on" type="button" data-files-lens="graph">Graph</button>
+      <button type="button" data-files-lens="tree">Tree</button>
     </div>
     <p class="ov" id="hint"><b>Click</b> a node to focus its neighbourhood &middot; <b>Double-click</b> a cluster to open or close it &middot; <b>Drag</b> to reposition &middot; <b>Scroll</b> to zoom</p>
     <div class="ov" id="legend"></div>
@@ -100,6 +102,23 @@
   <div class="scroll" id="panel-scroll"></div>
 </aside>
 
+<!-- file previewer (core/preview.js; any view opens it via space:preview-file) -->
+<aside id="preview">
+  <header>
+    <div class="pv-title">
+      <b id="preview-name"></b>
+      <code id="preview-path"></code>
+      <span id="preview-meta"></span>
+    </div>
+    <div class="pv-acts">
+      <button id="preview-source" type="button" hidden>Source</button>
+      <button id="preview-graph" type="button" title="Focus this file on the graph">Graph</button>
+      <button id="preview-close" type="button" title="Close (Esc)">&#10005;</button>
+    </div>
+  </header>
+  <div class="pv-body" id="preview-body"></div>
+</aside>
+
 <!-- hover card -->
 <div id="hc"></div>
 <div id="toast"></div>
@@ -119,6 +138,6 @@
   <div class="meta" id="fmeta"></div>
 </footer>
 
-<script type="module" src="js/app.js?v=20260813-timeline3"></script>
+<script type="module" src="js/app.js?v=20260817-a11y1"></script>
 
 </body></html>

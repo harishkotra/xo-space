@@ -36,7 +36,7 @@ export default {
   show(){/* Preserve an in-progress credential while switching tabs. */}
 };
 
-let switchTo=()=>{}; /* ctx.switchTo, captured on mount (opens the wiki) */
+let switchTo=()=>{}; /* ctx.switchTo, captured on mount (opens the Quirq view) */
 
 function renderShell(){
   root.innerHTML=
@@ -48,7 +48,7 @@ function renderShell(){
           +'<p>Choose the active agent, connect its native session store, tune the watcher, and provide credentials from one place.</p>'
         +'</div>'
         +'<div class="setup-hero-actions">'
-          +'<button class="setup-refresh" id="setup-wiki" type="button">Open the wiki</button>'
+          +'<button class="setup-refresh" id="setup-quirq" type="button">Open Quirq state</button>'
           +'<button class="setup-refresh" id="setup-refresh" type="button">Refresh status</button>'
         +'</div>'
       +'</header>'
@@ -64,7 +64,7 @@ function renderShell(){
             +'<div>'
               +'<label for="xo-root-input">XO root</label>'
               +'<input id="xo-root-input" type="text" autocomplete="off" spellcheck="false" placeholder="/Users/you/xo-projects">'
-              +'<small>Host folder containing project directories. Selecting a new root does not move project files.</small>'
+              +'<small>Host folder containing project directories — the one root the whole app reads. Selecting a new root does not move project files.</small>'
               +'<code id="xo-root-applied">Mounted now: checking…</code>'
             +'</div>'
             +'<div>'
@@ -76,7 +76,7 @@ function renderShell(){
           +'</div>'
           +'<div class="setup-form-error" id="roots-error" role="alert" hidden></div>'
           +'<div class="setup-root-apply" id="roots-apply" hidden>'
-            +'<div><b>Server restart required</b><p>Storage roots are applied when the server starts. Run this same one-command installer to restart with both roots.</p></div>'
+            +'<div><b>Server restart required</b><p>Saved roots are read at startup: restart the server and every tab reads the new XO root. On installer-managed containers, run the one-command installer instead — it also remaps the bind mounts.</p></div>'
             +'<pre id="roots-command"></pre>'
           +'</div>'
           +'<div class="setup-actions">'
@@ -171,7 +171,7 @@ function renderShell(){
 }
 
 function bindEvents(){
-  root.querySelector('#setup-wiki').addEventListener('click',()=>switchTo('wiki'));
+  root.querySelector('#setup-quirq').addEventListener('click',()=>switchTo('quirq'));
   root.querySelector('#setup-refresh').addEventListener('click',loadAll);
   runtimeForm.addEventListener('submit',saveRuntime);
   root.querySelector('#roots-form').addEventListener('submit',saveRoots);
@@ -318,8 +318,8 @@ function renderRuntime(){
   const rootPending=Boolean(runtimeData.roots?.change_required);
   if(rootPending){
     alert.className='setup-alert is-pending';
-    alert.innerHTML='<span aria-hidden="true">◆</span><div><b>New storage roots are saved but not mounted yet.</b>'
-      +'<p>Run the installer command shown below. It restarts the server with the new roots and also applies any pending runtime or credential changes.</p></div>';
+    alert.innerHTML='<span aria-hidden="true">◆</span><div><b>New storage roots are saved but not in use yet.</b>'
+      +'<p>Restart the server to load them — every tab then reads the new XO root. On an installer-managed container, run the command below instead; it also remaps the bind mounts and applies any pending runtime or credential changes.</p></div>';
   }else if(runtimeData.restart_required){
     const reasons=runtimeData.restart_reasons||[];
     const runtimePending=reasons.includes('runtime');
@@ -376,7 +376,7 @@ function renderRoots(){
   root.querySelector('#xo-root-applied').textContent='Mounted now: '+(applied.xo_projects_root||'not reported');
   root.querySelector('#quirq-root-applied').textContent='Mounted now: '+(applied.quirq_state_root||'not reported');
   const badge=root.querySelector('#roots-badge');
-  badge.textContent=roots.change_required?'Pending installer':'Mounted';
+  badge.textContent=roots.change_required?'Pending restart':'In use';
   badge.className=roots.change_required?'is-pending':'is-good';
   const apply=root.querySelector('#roots-apply');
   const copy=root.querySelector('#roots-copy');
@@ -507,7 +507,7 @@ async function saveRoots(event){
   }
   runtimeData=res.data.status;
   renderRuntime();
-  toast(runtimeData.roots?.change_required?'Roots saved — run the installer to apply':'Roots already match the mounted folders');
+  toast(runtimeData.roots?.change_required?'Roots saved — restart to apply':'Roots already match the folders in use');
 }
 
 async function copyRootCommand(){
