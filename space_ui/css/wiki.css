@@ -45,8 +45,6 @@
 .wiki-table td{padding:13px 14px;border-top:1px solid var(--line-soft);font-size:12.5px;line-height:1.55;color:var(--ink-2);vertical-align:top}
 .wiki-table td:first-child{font-weight:600;color:var(--ink);white-space:nowrap}
 .wiki-table.wiki-matrix td{white-space:normal}
-.wiki-sources a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(168,217,79,.3)}
-.wiki-sources a:hover{border-bottom-color:var(--accent)}
 .wiki-grid{display:grid;grid-template-columns:1fr 1fr;gap:42px}
 .wiki-grid>div+div{padding-left:42px;border-left:1px solid var(--line-soft)}
 .wiki-callout{margin-top:38px;padding:20px 22px;border:1px solid rgba(168,217,79,.28);border-radius:12px;background:rgba(168,217,79,.055)}

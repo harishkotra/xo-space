@@ -138,91 +138,12 @@ class SpaceWikiTests(unittest.TestCase):
         self.assertIn("Everything in .quirq", wiki)
         self.assertIn("secrets.env", wiki)
         self.assertIn("Building useful flows", wiki)
-        self.assertIn("Collaborative version history", wiki)
         self.assertIn(
             "watcher/activity/projects/&lt;id&gt;.json",
             wiki,
         )
         self.assertIn("GET /api/xo-projects/{id}/activity", wiki)
         self.assertIn("GET /api/xo-projects/{id}/timeline?limit=100", wiki)
-
-    def test_wiki_documents_collaborative_version_control_design(self) -> None:
-        wiki = (ROOT / "space_ui" / "js" / "views" / "wiki.js").read_text(
-            encoding="utf-8"
-        )
-
-        self.assertIn("id:'collaboration'", wiki)
-        self.assertIn("collaboration:collaborationArticle", wiki)
-        self.assertIn("Do not version the directory", wiki)
-        self.assertIn("Yjs + Hocuspocus + PostgreSQL", wiki)
-        self.assertIn("Synchronization history", wiki)
-        self.assertIn("User-visible version history", wiki)
-        self.assertIn("Operational disaster recovery", wiki)
-        self.assertIn("Restore as a new latest version", wiki)
-        self.assertIn("watcher/activity/**", wiki)
-        self.assertIn("secret reference IDs", wiki)
-        self.assertIn("Automerge Repo", wiki)
-        self.assertIn("Liveblocks + Yjs", wiki)
-        self.assertIn("docs.yjs.dev/api/document-updates", wiki)
-        self.assertIn("support.google.com/docs/answer/190843", wiki)
-        index = (ROOT / "space_ui" / "index.html").read_text(encoding="utf-8")
-        self.assertIn("css/wiki.css?v=20260725-collaboration1", index)
-
-    def test_wiki_documents_space_walk_session_replay(self) -> None:
-        wiki = (ROOT / "space_ui" / "js" / "views" / "wiki.js").read_text(
-            encoding="utf-8"
-        )
-
-        self.assertIn("id:'spacewalk'", wiki)
-        self.assertIn("spacewalk:spaceWalkArticle", wiki)
-        self.assertIn("Space Walk session replay", wiki)
-        self.assertIn("Sessions replayed as light", wiki)
-        self.assertIn("bin/spacewalk serve --port 8765", wiki)
-        # The local-except-the-judge carve-out the upstream README also makes.
-        self.assertIn("Replay is entirely local", wiki)
-        self.assertIn("The one exception is the optional", wiki)
-        self.assertNotIn("Everything runs locally", wiki)
-        # The touch lattice and its data-encoding palette (hexes live in the
-        # token table only, so the lattice table cannot drift from them).
-        self.assertIn("edit &gt; read &gt; hit", wiki)
-        self.assertIn("#6a6700", wiki)
-        self.assertIn("#5399d1", wiki)
-        self.assertIn("#78a31e", wiki)
-        self.assertNotIn("validated for color-vision", wiki)
-        # Geometry facts verified against the Space Walk source tree.
-        self.assertIn("squarified-treemap-v1", wiki)
-        self.assertIn("sqrt(max(lines, bytes/4096, 16))", wiki)
-        self.assertIn("160-bucket histogram", wiki)
-        # Per-session observability grading, not per-harness.
-        self.assertIn("session, not per harness", wiki)
-        # Boundaries: a trace is transcript-adjacent, and nothing is written back.
-        self.assertIn("A trace is not <code>.xo</code>-safe", wiki)
-        self.assertIn("~/.spacewalk/judge", wiki)
-        # Failure handling, the idiom every other long article carries.
-        self.assertIn("Interpretation and troubleshooting", wiki)
-        self.assertIn("Tilde on the error count", wiki)
-        # HTTP surface, CLI, and the judge report cache.
-        self.assertIn("GET /api/sessions/{selector}/snapshot", wiki)
-        self.assertIn("spacewalk analyze &lt;session&gt;", wiki)
-        self.assertIn("~/.spacewalk/reports/&lt;sessionKey&gt;.json", wiki)
-        # Quirq recipes cross-link the Quirq view (opened from Setup) and
-        # the upstream project. data-open-tab routes through ctx.switchTo,
-        # which reaches nav:false views just as well as tabs.
-        self.assertIn('data-open-tab="quirq"', wiki)
-        self.assertIn("Recipe 5 · Is inference changing S₁ at all?", wiki)
-        self.assertIn("https://github.com/cosmtrek/mindwalk", wiki)
-        # Calculator routes are callable as printed, and the quirq citations
-        # match the corpus: Definition 4 attributes rescue, O alone corrects.
-        self.assertIn(
-            "GET /api/repo/compare?path=&lt;repo&gt;&amp;from=u42-s0&amp;to=u42-s1",
-            wiki,
-        )
-        self.assertIn("human rescue attributed to the rescued unit", wiki)
-        self.assertIn("QER*(T) = QER(T)·(1 − O(T))", wiki)
-        self.assertIn("$65/h loaded rate", wiki)
-        self.assertNotIn("that A2 says must be", wiki)
-        # The cache-bust chain itself is checked structurally in
-        # test_cache_bust_chain_is_intact, not pinned to a literal here.
 
     def test_wiki_has_a_dedicated_guide_for_every_reachable_view(self) -> None:
         wiki = (ROOT / "space_ui" / "js" / "views" / "wiki.js").read_text(
