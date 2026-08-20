@@ -7,6 +7,7 @@
    are broken.) Window filtering happens here, client-side, over per-day
    rollups. */
 import {API_BASE,apiFetch} from '../core/api.js';
+import {esc} from '../core/esc.js';
 
 let _open=null;
 
@@ -21,7 +22,6 @@ let SD=null,loading=false,failed=null,win='7d',sub='overview',sel=null,sortK='st
 const PAGE_SIZE=10;              /* sessions list page length */
 const promptsCache=new Map();    /* session key -> session_prompts payload */
 
-const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const tok=n=>n>=1e9?(n/1e9).toFixed(1)+'B':n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(1)+'K':String(Math.round(n));
 const usd=n=>{n=Number(n)||0;return'~$'+(n>=1000?Math.round(n).toLocaleString():n>=100?n.toFixed(0):n.toFixed(2));};
 const costfmt=(n,known=true)=>known===false?((Number(n)||0)>0?usd(n)+'*':'—'):usd(n);

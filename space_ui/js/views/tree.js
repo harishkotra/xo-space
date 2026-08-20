@@ -18,9 +18,9 @@
    is cached server-side for 30s, and apiFetch single-flights concurrent
    GETs — so the second reader costs nothing. */
 import {API_BASE,apiFetch} from '../core/api.js';
+import {esc} from '../core/esc.js';
 
 const plural=(n,word)=>n.toLocaleString()+' '+word+(n===1?'':'s');
-const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 /* Layout constants, all in px of the (unscaled) tree surface. */
 const COL_W=212;   /* one level of depth */

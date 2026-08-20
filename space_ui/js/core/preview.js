@@ -18,8 +18,8 @@
    hatch when a render looks wrong. */
 import {API_BASE,apiFetch} from './api.js';
 import {mdToHtml} from './markdown.js';
+import {esc} from './esc.js';
 
-const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const bytes=n=>n==null?'':n<1024?n+' B'
   :n<1048576?(n/1024).toFixed(n<10240?1:0)+' KB':(n/1048576).toFixed(1)+' MB';
 function rel(iso){

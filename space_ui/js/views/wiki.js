@@ -4,6 +4,8 @@
    the exact watcher/storage contracts shipped by this server version.
 */
 
+import {esc as wikiEsc} from '../core/esc.js';
+
 const PAGES=[
   {
     id:'storage',
@@ -100,10 +102,6 @@ const ARTICLES={
   'tab-quirq':()=>tabGuideArticle('quirq'),
   'tab-setup':()=>tabGuideArticle('setup')
 };
-const wikiEsc=value=>String(value??'').replace(
-  /[&<>"]/g,
-  char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[char])
-);
 
 let root=null;
 let activePage='storage';

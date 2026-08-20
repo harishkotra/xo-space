@@ -5,11 +5,7 @@
    view. */
 import {apiFetch} from '../core/api.js';
 import {toast} from '../core/ui.js';
-
-const esc=value=>String(value??'').replace(
-  /[&<>"]/g,
-  char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[char])
-);
+import {esc} from '../core/esc.js';
 
 let root=null;
 let timer=null;

@@ -8,6 +8,7 @@
    nothing is embedded here. */
 import {API_BASE,apiFetch} from '../core/api.js';
 import {toast} from '../core/ui.js';
+import {esc} from '../core/esc.js';
 
 let go=()=>{};   /* ctx.switchTo, captured on first mount */
 const hooks={};  /* boot() assigns lifecycle hooks here once it has run */
@@ -167,7 +168,6 @@ function radiusOf(n){
 NODES.forEach(n=>n.r=radiusOf(n));
 const fmtDate=d=>new Date(d+'T00:00:00').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
 const fmtMY=t=>new Date(t).toLocaleDateString('en-US',{year:'numeric',month:'short'});
-const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const hexA=(h,a)=>`rgba(${parseInt(h.slice(1,3),16)},${parseInt(h.slice(3,5),16)},${parseInt(h.slice(5,7),16)},${a})`;
 const REDUCED=matchMedia('(prefers-reduced-motion: reduce)').matches;
 

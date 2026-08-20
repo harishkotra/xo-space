@@ -6,9 +6,9 @@
    project `.xo` data. */
 import {apiFetch} from '../core/api.js';
 import {toast} from '../core/ui.js';
+import {esc} from '../core/esc.js';
 
 const KEY_RE=/^[A-Z_][A-Z0-9_]*$/;
-const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 
 let root=null;

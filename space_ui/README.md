@@ -24,6 +24,7 @@ directly. Descended from the single-file xo-atlas `v3.html`.
 | `js/core/api.js` | The one fetch layer: `API_BASE`, query-string auth forwarding, offline / HTTP-error / 501 classification, single-flight GETs. |
 | `js/core/store.js` | Idempotency helpers: single-flight promises, slotted (non-stacking) intervals. |
 | `js/core/ui.js` | Shared UI helpers (toast). |
+| `js/core/esc.js` | The one HTML-escaping helper. Every view builds markup by concatenation, so this is the single guard between workspace data and the parser — it escapes `"` as well, because escaped output routinely lands inside attributes. |
 | `js/core/server-widget.js` | Footer server pill (status poll + stop). |
 | `js/core/preview.js` | File previewer drawer. Any view opens it with a `space:preview-file` event; markdown renders through `markdown.js`, HTML renders in an empty-`sandbox` iframe, everything else as escaped source. |
 | `js/views/atlas.js` | Dashboard + Graph + Timeline — three lenses over one dataset, one shared closure, three exported views. |

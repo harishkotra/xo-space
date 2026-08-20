@@ -6,8 +6,8 @@
    are deliberately not wired yet; the sync-vs-git decision is open. */
 import {API_BASE,apiFetch} from '../core/api.js';
 import {workspaceCounts} from '../core/workspace.js';
+import {esc} from '../core/esc.js';
 
-const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const dtfmt=iso=>iso?new Date(iso).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'}):'—';
 function rel(iso){
   if(!iso)return'—';
