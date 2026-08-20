@@ -1,0 +1,35 @@
+{
+  "_shape": {
+    "name": "required, unique",
+    "description": "optional",
+    "command": "single shell command (use this OR commands, not both)",
+    "commands": ["step 1", "step 2 — run sequentially, stop at first failure"],
+    "timeout_seconds": "optional, default 300, applies per command",
+    "cwd": "optional working directory for every command",
+    "success_message": "optional human-authored line shown on success; plain text or with placeholders; a default is used if omitted. Failure is always a generic 'Failed to install <name>.'",
+    "_placeholders": "in any command or success_message: {skills_dir} → active agent's <home_dir>/skills, {home_dir}, {agent_name}. Unknown {..} pass through. Path placeholders expand to raw paths — double-quote them in commands (--dir \"{skills_dir}\") so spaces survive."
+  },
+  "skills": [
+    {
+      "name": "okx",
+      "description": "okx/onchainos-skills + @okxweb3/a2a-node — installed for every agent that declares okx",
+      "commands": [
+        "npx skills add okx/onchainos-skills --yes -g",
+        "npm install -g @okxweb3/a2a-node"
+      ],
+      "success_message": "OKX OnchainOS skills + a2a-node installed."
+    },
+    {
+      "name": "okx-a2a-openclaw",
+      "description": "@okxweb3/a2a-openclaw — OKX a2a connector for openclaw (declared only in openclaw settings)",
+      "command": "npm install -g @okxweb3/a2a-openclaw",
+      "success_message": "OKX a2a-openclaw installed."
+    },
+    {
+      "name": "okx-a2a-hermes",
+      "description": "@okxweb3/a2a-hermes — OKX a2a connector for hermes (declared only in hermes settings)",
+      "command": "npm install -g @okxweb3/a2a-hermes",
+      "success_message": "OKX a2a-hermes installed."
+    }
+  ]
+}

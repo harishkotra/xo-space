@@ -180,7 +180,8 @@ AGENT_NAME=hermes venv/bin/python server.py        # boot a specific backend
 ```
 
 The full local setup and configuration guide is in
-[`INSTALLATION.md`](INSTALLATION.md).
+[`INSTALLATION.md`](INSTALLATION.md). How the same tree serves both cloud and
+local deployments — the environment contract that selects behavior — is §9.
 
 **Validation playbook — run before every commit:**
 
@@ -261,3 +262,60 @@ The agent-modular refactor was finished and tidied:
   code"; a local AST guard (kept out of the repo) can check it.
 
 Full record: `docs/refactor/STATUS.md` and `HANDOFF.md` (local).
+
+---
+
+## 9. Cloud vs local: the runtime contract
+
+The same tree runs in two deployment shapes — **cloud** (the workspaces launched
+on the platform) and **local** (a developer's `curl | install`). There is **no
+`mode` flag**. The difference is a small set of `QUIRQ_*` environment variables,
+each read at the one seam where a behavior must differ, all defaulting to
+**cloud-safe** values. Cloud is therefore "set almost nothing"; local opts in.
+
+Who sets them:
+
+- **Cloud** — built and launched entirely by the external `xo-coder-templates`
+  repo. The image bakes this repo + its venv + the agent CLI; the coder
+  `startup_script` writes `.env` with `AGENT_NAME`, `XO_API_KEY`,
+  `CHAT_API_BASE_URL` and leaves the `QUIRQ_*` vars at their defaults. Launch is
+  `venv/bin/python server.py`. There is **no cloud packaging inside this repo**.
+- **Local** — a native run on the developer's own machine (not a container).
+  `install.sh` starts the server directly and writes the resolved profile to
+  `~/.quirq/runtime.env`. It exports `STAGE=local`, `QUIRQ_SKIP_BOOT_INSTALL=1`
+  (only `requirements.txt` in `venv/` — the boot hooks must not apt-install,
+  nvm-fetch Node, or `npm -g` anything on a real machine), and the `QUIRQ_*` /
+  path variables below.
+
+> **Invariant — keep mode out of business logic.** No core file asks "am I local
+> or cloud?"; each seam reads its own specific variable, and the unset/default
+> path is the cloud path. When adding a feature that must differ between
+> deployments, **add a new `QUIRQ_*` gate with a cloud-safe default and read it
+> at the seam** — never scatter `if local:` branches through handlers. This is
+> the same spirit as the modularity invariant (§6): resolve by config at one
+> point, don't entangle the core. (A single `XO_MODE` umbrella flag was
+> considered and deliberately deferred — it would either collapse these
+> independent knobs into two rigid presets or invite exactly the scattered
+> mode-checks this invariant forbids. If one entry point ever becomes necessary,
+> add it as a thin layer that only supplies *defaults* for the variables below,
+> each still individually overridable, and never read it inside a seam.)
+
+The gates (authoritative values live in `install.sh` for local and the coder
+`startup_script` in `xo-coder-templates` for cloud; this is the map):
+
+| Variable | Controls | Cloud (default) | Local (native) | Read at |
+| --- | --- | --- | --- | --- |
+| `AGENT_NAME` | active backend adapter — **orthogonal** to packaging | set per template (e.g. `codex`) | set by install (default `claude_code`) | `registry/` |
+| `STAGE` | marks a local run; drives the port fallback | unset / non-local → pass-through | `local` | `utils/local_port.py` |
+| `QUIRQ_STATE_ROOT` | persistent local-install state dir | unset → `~/.quirq` | `<launch-dir>/.quirq` | `services/cowork_agent/local_state.py` |
+| `QUIRQ_RUNTIME_FILE` / `QUIRQ_SECRETS_FILE` | extra env / secrets files loaded at boot | unset (secrets injected via env) | `<state>/runtime.env`, `<state>/secrets.env` | `server.py` (dotenv load) |
+| `PORT` + `resolve_server_port` | bind port | binds the given port as-is | explicit `PORT`; when it is the `5002` default and busy, shifts `5002→5003` | `utils/local_port.py`, `server.py` |
+| `QUIRQ_SKIP_BOOT_INSTALL` | skip boot-time dep/skill install | default (image pre-bakes deps) | `1` | `server.py` (`_boot_installs_disabled`) |
+| `QUIRQ_WATCHER_SOURCE_MODE` | visualizer telemetry ingest source | default `active` | `all` | `services/cowork_agent/visualizer/watcher.py` |
+| `QUIRQ_PUBLIC_URL` | externally reachable base URL | unset | `http://localhost:${PORT}` | `runtime_config.py` |
+| `STARTUP_WARMUP_URL` | self-warmup target after boot | `http://localhost:${PORT}` | `http://127.0.0.1:${PORT}` | `server.py` |
+
+Because both shapes register the **same** routes (verified: the local route set
+minus the cloud route set is empty), cloud vs local never changes *which
+endpoints exist* — only the runtime behaviors above. That is what makes one tree,
+one branch, serve both.
