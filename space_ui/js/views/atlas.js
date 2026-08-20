@@ -672,7 +672,6 @@ function select(id,depth,fly=true){
   document.getElementById('crumb').classList.add('is-on');
   openPanel(n);
   syncSats(n);
-  syncCommits(n);
   if(fly){
     const kT=Math.max(cam.k,1.6);
     const off=GW>760?PANEL_W/2/kT:0;
@@ -866,7 +865,6 @@ function openPanel(n){
     </div>
     <div class="psec"><h4>About</h4><p>${esc(n.blurb||'')}</p></div>
     ${todoSectionHTML(n)}
-    ${commitSectionHTML(n)}
     ${conns?`<div class="psec"><h4>Connections</h4>${conns}</div>`:''}
     <div class="pacts">
       ${n.type==='leaf'||n.type==='group'?`<button data-act="timeline">Show on timeline</button>`:''}
@@ -893,13 +891,6 @@ panel.addEventListener('click',e=>{
   const row=e.target.closest('.ptodo');
   if(row){
     satPulse={key:row.dataset.todo,t0:performance.now()};
-    return;
-  }
-  const pc=e.target.closest('.pcommit');
-  if(pc&&comHost){
-    dispatchEvent(new CustomEvent('space:show-commit',
-      {detail:{project:comHost,sha:pc.dataset.sha}}));
-    go('snapshot');
     return;
   }
   const a=e.target.closest('[data-act]');
@@ -1179,71 +1170,6 @@ function renderTodoSection(){
   const el=document.getElementById('panel-todos');
   if(!el||panel.dataset.id!==satHost)return;
   el.innerHTML=todoBodyHTML();
-}
-
-/* ===================== PANEL COMMITS (graph hubs) ===================== */
-/* The graph dataset's project hubs each carry a real repository; their
-   panel lists recent commits, and a click opens the Snapshot view — the
-   whole tree as it stood at that commit. Same shape as the todos block
-   above: one gate, a token against stale responses, a small TTL cache so
-   re-selecting a project is instant, and subtree patching so the panel
-   never loses its scroll position. */
-const commitProjectId=n=>bootDataset==='graph'&&n&&n.type==='hub'?n.id.replace(/^p_/,''):null;
-const COM_TTL=30000,COM_ROWS=12;
-let comHost=null,comNodeId=null,comState='idle',comRows=[],comNote='',comToken=0;
-const comCache=new Map();
-
-function commitSectionHTML(n){
-  return commitProjectId(n)?`<div class="psec" id="panel-commits">${commitBodyHTML()}</div>`:'';
-}
-function commitBodyHTML(){
-  const head=`<h4>Commits</h4>`;
-  if(comState==='loading')return head+`<div class="prj-note">reading git log&hellip;</div>`;
-  if(comState==='error')return head+`<div class="prj-note">${esc(comNote)}</div>`;
-  if(comState!=='ready')return head;
-  if(!comRows.length)return head+`<div class="prj-note">${esc(comNote||'no commits yet')}</div>`;
-  const shown=comRows.slice(0,COM_ROWS);
-  return head
-    +`<div class="prj-commits">`+shown.map(c=>
-      `<button class="pcommit" data-sha="${esc(c.sha)}" title="Open the snapshot at ${esc(c.short)}">
-        <code>${esc(c.short)}</code>
-        <span class="csub">${esc(c.subject)}</span>
-        <span class="cmeta">${esc((c.date||'').slice(0,10))}${c.files_changed!=null?' \u00b7 '+c.files_changed+'f':''}</span>
-      </button>`).join('')+`</div>`
-    +(comRows.length>shown.length?`<div class="prj-note">${shown.length} of ${comRows.length} fetched</div>`:'');
-}
-function renderCommitSection(){
-  const el=document.getElementById('panel-commits');
-  if(!el||panel.dataset.id!==comNodeId)return;
-  el.innerHTML=commitBodyHTML();
-}
-function syncCommits(n){
-  const pid=commitProjectId(n);
-  if(pid&&pid===comHost){renderCommitSection();return;}
-  comToken++;comHost=pid;comNodeId=n?n.id:null;
-  comState='idle';comRows=[];comNote='';
-  if(!pid)return;
-  const hit=comCache.get(pid);
-  if(hit&&performance.now()-hit.t<COM_TTL){
-    comState=hit.state;comRows=hit.rows;comNote=hit.note;
-    renderCommitSection();return;
-  }
-  comState='loading';renderCommitSection();
-  loadCommits(pid,comToken);
-}
-async function loadCommits(pid,tok){
-  const res=await apiFetch(API_BASE+'/api/xo-projects/'+encodeURIComponent(pid)+'/commits?limit=30');
-  if(tok!==comToken)return; /* a newer selection owns the panel */
-  if(!res.ok){
-    comState='error';
-    comNote=res.offline?'xo-cowork-api is unreachable':String(res.error||'could not read commits');
-  }else{
-    comState='ready';
-    comRows=res.data.commits||[];
-    comNote=res.data.git===false?'not a git repository':'';
-  }
-  comCache.set(pid,{t:performance.now(),state:comState,rows:comRows,note:comNote});
-  renderCommitSection();
 }
 
 /* ============================== SEARCH ============================== */
@@ -1961,14 +1887,90 @@ tsvg.addEventListener('click',e=>{
     select(n.id,1);
     pulseN={id:n.id,t0:performance.now()};
   }else if(t.dataset&&t.dataset.hist){
-    /* a commit dot names its project: jump to that hub on the graph */
+    /* a commit dot names a day of commits: resolve it to shas and open the
+       snapshot — directly for a one-commit day, via the chooser otherwise */
     const d=histDots[+t.dataset.hist];
-    if(!d||!byId.get(d.cat))return;
-    go(graphRoute);
-    select(d.cat,1);
-    pulseN={id:d.cat,t0:performance.now()};
+    if(d)openCommitDay(d,e.clientX,e.clientY);
   }
 });
+
+/* ---- commit-day chooser: the bridge from a timeline dot to a snapshot.
+   gitHistory carries day rollups, never shas; /commits?day= resolves the
+   day to real commits. One commit opens straight away; several get a
+   popover at the click point. The popover is shared chrome like #hc,
+   created once, dismissed by outside click, Esc, or opening a commit. */
+let chooserEl=null,chooserToken=0;
+const dayCache=new Map(); /* "pid|day" -> commits[] */
+function chooser(){
+  if(chooserEl)return chooserEl;
+  chooserEl=document.createElement('div');
+  chooserEl.id='tchooser';
+  document.body.appendChild(chooserEl);
+  addEventListener('pointerdown',e=>{
+    if(!chooserEl.contains(e.target))closeChooser();
+  },true);
+  addEventListener('keydown',e=>{if(e.key==='Escape')closeChooser();});
+  chooserEl.addEventListener('click',e=>{
+    const row=e.target.closest('[data-sha]');
+    if(!row)return;
+    openSnapshot(chooserEl.dataset.pid,row.dataset.sha);
+  });
+  return chooserEl;
+}
+function closeChooser(){chooserEl?.classList.remove('is-on');chooserToken++;}
+function placeChooser(el,x,y){
+  el.classList.add('is-on');
+  const r=el.getBoundingClientRect();
+  let px=x+14,py=y-10;
+  if(px+r.width>innerWidth-10)px=x-r.width-14;
+  py=Math.max(64,Math.min(py,innerHeight-r.height-10));
+  el.style.left=px+'px';el.style.top=py+'px';
+}
+function openSnapshot(pid,sha){
+  closeChooser();
+  hideHC();
+  dispatchEvent(new CustomEvent('space:show-commit',{detail:{project:pid,sha}}));
+  go('snapshot');
+}
+async function openCommitDay(d,x,y){
+  const pid=d.cat.replace(/^p_/,'');
+  const el=chooser();
+  el.dataset.pid=pid;
+  const mine=++chooserToken;
+  const key=pid+'|'+d.day.d;
+  let commits=dayCache.get(key);
+  if(!commits){
+    el.innerHTML='<div class="tch-note">reading '+esc(d.day.d)+'&hellip;</div>';
+    placeChooser(el,x,y);
+    const res=await apiFetch(API_BASE+'/api/xo-projects/'+encodeURIComponent(pid)
+      +'/commits?day='+encodeURIComponent(d.day.d));
+    if(mine!==chooserToken)return; /* dismissed or a newer dot clicked */
+    if(!res.ok){
+      el.innerHTML='<div class="tch-note">'+esc(res.offline
+        ?'xo-cowork-api is unreachable':String(res.error||'could not read commits'))+'</div>';
+      placeChooser(el,x,y);
+      return;
+    }
+    commits=res.data.commits||[];
+    dayCache.set(key,commits);
+  }
+  if(commits.length===1){openSnapshot(pid,commits[0].sha);return;}
+  if(!commits.length){
+    /* the dot promised commits the log no longer shows (rebase, shallow
+       clone): say so rather than opening nothing */
+    el.innerHTML='<div class="tch-note">no commits found for '+esc(d.day.d)+'</div>';
+    placeChooser(el,x,y);
+    return;
+  }
+  el.innerHTML='<div class="tch-head">'+esc(CAT[d.cat]?.name||pid)+' &middot; '+esc(d.day.d)
+    +' &middot; '+commits.length+' commits</div>'
+    +commits.map(c=>'<button data-sha="'+esc(c.sha)+'">'
+      +'<span class="tch-time">'+esc((c.date||'').slice(11,16))+'</span>'
+      +'<code>'+esc(c.short)+'</code>'
+      +'<span class="tch-subj">'+esc(c.subject)+'</span>'
+    +'</button>').join('');
+  placeChooser(el,x,y);
+}
 
 /* ============================== BOOT ============================== */
 function resize(){

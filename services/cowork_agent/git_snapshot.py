@@ -126,6 +126,40 @@ def list_commits(pdir: Path, limit: int = 40) -> Optional[list[dict]]:
     return _parse_log(raw)
 
 
+_DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+# Bounds the full-history parse a day query walks. At ~60 bytes a line this
+# is ~6 MB of text — far past any workspace repo, cheap enough to not index.
+_MAX_DAY_SCAN = 100_000
+
+
+def valid_day(day: str) -> bool:
+    """True iff ``day`` is a YYYY-MM-DD string a day query will accept."""
+    return bool(_DAY_RE.match(day or ""))
+
+
+def commits_on_day(pdir: Path, day: str) -> Optional[list[dict]]:
+    """Every commit whose author date falls on one ISO day, newest first.
+
+    The timeline's dots aggregate by author day (space_index uses
+    ``--date=short``), so this filters the same field rather than trusting
+    ``--since``/``--until``, which cut on commit date and drift from the
+    dots whenever history was rebased. No ``--shortstat``: a day query is
+    one line per commit over the full log, kept cheap on purpose.
+    """
+    if not _DAY_RE.match(day or ""):
+        return None
+    if not _is_repo(pdir):
+        return None
+    raw = _run_git(
+        pdir, "log", f"--max-count={_MAX_DAY_SCAN}",
+        "--date=iso-strict", f"--pretty=format:{_LOG_FORMAT}",
+    )
+    if raw is None:
+        return [] if _run_git(pdir, "rev-parse", "--git-dir") is not None else None
+    return [c for c in _parse_log(raw) if c["date"][:10] == day]
+
+
 def commit_snapshot(pdir: Path, sha: str) -> Optional[dict]:
     """The full tree at one commit, plus what that commit touched.
 

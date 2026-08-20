@@ -109,6 +109,18 @@ class GitSnapshotServiceTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 git_snapshot.file_at_commit(self.repo, newest, bad, max_bytes=8)
 
+    def test_commits_on_day_filters_by_author_day(self) -> None:
+        newest = self._shas()[0]
+        day = newest["date"][:10]
+        on_day = git_snapshot.commits_on_day(self.repo, day)
+        # both fixture commits were authored in the same test run
+        self.assertEqual(len(on_day), 2)
+        self.assertEqual(on_day[0]["sha"], newest["sha"])
+        self.assertEqual(git_snapshot.commits_on_day(self.repo, "1999-01-01"), [])
+        self.assertIsNone(git_snapshot.commits_on_day(self.repo, "not-a-day"))
+        self.assertTrue(git_snapshot.valid_day("2026-08-20"))
+        self.assertFalse(git_snapshot.valid_day("--since=x"))
+
     def test_non_repo_directory_is_none_not_parent_history(self) -> None:
         plain = Path(self._tmp.name) / "plain"
         plain.mkdir(exist_ok=True)
@@ -131,24 +143,54 @@ class SnapshotWiringTests(unittest.TestCase):
         head = src.split("export default", 1)[1]
         contract = head[: head.index("mount(")]
         self.assertIn("nav:false", contract)
-        self.assertIn("parent:'projects'", contract)
+        # the snapshot belongs to the Timeline: its tab stays highlighted
+        # and the back button returns there
+        self.assertIn("parent:'time'", contract)
+        self.assertIn("go('time')", src)
 
-    def test_graph_panel_lists_commits_and_opens_snapshot(self) -> None:
+    def test_timeline_dots_resolve_days_and_open_snapshots(self) -> None:
         atlas = (ROOT / "space_ui" / "js" / "views" / "atlas.js").read_text(
             encoding="utf-8"
         )
-        self.assertIn("commitSectionHTML(n)", atlas)
-        self.assertIn("/commits?limit=", atlas)
+        # a commit-day dot opens the chooser, which resolves the day to shas
+        self.assertIn("openCommitDay(d,", atlas)
+        self.assertIn("/commits?day=", atlas)
         self.assertIn("space:show-commit", atlas)
         self.assertIn("go('snapshot')", atlas)
+        # the graph panel no longer carries the entry point
+        self.assertNotIn("commitSectionHTML", atlas)
+        self.assertNotIn("pcommit", atlas)
         snapshot = (ROOT / "space_ui" / "js" / "views" / "snapshot.js").read_text(
             encoding="utf-8"
         )
         self.assertIn("space:show-commit", snapshot)
-        self.assertIn("/snapshot'", snapshot)
         # a clicked file opens the shared previewer pinned to the commit
         self.assertIn("space:preview-file", snapshot)
         self.assertIn("ref:cur.sha", snapshot)
+
+    def test_snapshot_speaks_space_walk_citymap_grammar(self) -> None:
+        """The renderer is a deliberate port of mindwalk's citymap; these
+        literals ARE the contract — layout constants from
+        internal/citymap/builder.go, palette from web/src/scene."""
+        src = (ROOT / "space_ui" / "js" / "views" / "snapshot.js").read_text(
+            encoding="utf-8"
+        )
+        # builder.go: the 120-unit plain, 0.08 inset streets, aspect cap 40
+        self.assertIn("const WORLD=120", src)
+        self.assertIn("INSET=0.08", src)
+        self.assertIn("ASPECT_CAP=40", src)
+        # fileWeight's byte fallback: sqrt(max(bytes/4096, 16))
+        self.assertIn("/4096,16", src)
+        # CityScene: plate shading, unvisited tile + FNV-1a jitter
+        self.assertIn("#161a20", src.lower())
+        self.assertIn("16777619", src)
+        # sceneUtils touch lattice: edit / hit / read
+        self.assertIn("'#a8d94f'", src)
+        self.assertIn("'#a8a24e'", src)
+        self.assertIn("'#9dc0e8'", src)
+        # dirLabels: LOD threshold and label budget
+        self.assertIn("LABEL_MIN_SUBTREE_PX=60", src)
+        self.assertIn("LABEL_BUDGET=120", src)
 
     def test_previewer_forwards_the_ref(self) -> None:
         preview = (ROOT / "space_ui" / "js" / "core" / "preview.js").read_text(

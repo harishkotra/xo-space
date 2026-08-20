@@ -76,10 +76,24 @@ def _require_project_dir(project_id: str):
     "/api/xo-projects/{project_id}/commits",
     response_model=CommitListResponse,
 )
-def project_commits(project_id: str, limit: int = 40) -> CommitListResponse:
-    """Newest-first commits for one project; empty shape for a non-repo."""
+def project_commits(
+    project_id: str, limit: int = 40, day: Optional[str] = None
+) -> CommitListResponse:
+    """Newest-first commits for one project; empty shape for a non-repo.
+
+    ``day`` (ISO date) narrows to the commits authored that day — the
+    timeline's commit-day dots resolve to shas through this.
+    """
     pdir = _require_project_dir(project_id)
-    commits = git_snapshot.list_commits(pdir, limit=min(max(limit, 1), _COMMITS_MAX))
+    if day is not None:
+        if not git_snapshot.valid_day(day):
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "invalid_day", "message": "day must be YYYY-MM-DD."},
+            )
+        commits = git_snapshot.commits_on_day(pdir, day)
+    else:
+        commits = git_snapshot.list_commits(pdir, limit=min(max(limit, 1), _COMMITS_MAX))
     if commits is None:
         return CommitListResponse(project_id=project_id, git=False, commits=[])
     return CommitListResponse(
