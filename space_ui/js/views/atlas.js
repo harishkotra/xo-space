@@ -116,6 +116,10 @@ function boot(DATA,DATA_SOURCE){
    All graph content comes from .xo/space.json (GET /xo/space.json); nothing is
    embedded here. */
 const CAT=DATA.categories;
+/* Optional fixed hub anchors ({cat:[x,y]} world coords). The eight-region
+   dashboard lays its hubs on a 2x4 grid; without this field the classic
+   circle-of-hubs seeding below applies unchanged. */
+const HUB_POS=DATA.hubPositions||null;
 const ACCENT='#a8d94f', ACCENT_DEEP='#83d63a';
 const graphRoute=bootDataset==='dashboard'?'dashboard':'graph';
 const hubLabel=DATA.meta.hubLabel||'Department';
@@ -128,7 +132,11 @@ DATA.leaves.forEach(l=>NODES.push({
   date:l.date,blurb:l.blurb,path:l.path,clusters:l.clusters||[],xotype:l.xotype
 }));
 const EDGES=[];
-DATA.hubs.forEach(h=>EDGES.push({s:DATA.root.id,t:h.id,kind:'root',label:DATA.meta.rootEdgeLabel||'a department of XO'}));
+/* Grid anchors sit at unequal distances from the root, so each root edge
+   carries its own rest length (e.d) — one shared spring distance would drag
+   every hub off its anchor. */
+DATA.hubs.forEach(h=>EDGES.push({s:DATA.root.id,t:h.id,kind:'root',label:DATA.meta.rootEdgeLabel||'a department of XO',
+  d:HUB_POS&&HUB_POS[h.cat]?Math.hypot(HUB_POS[h.cat][0],HUB_POS[h.cat][1]):undefined}));
 DATA.groups.forEach(g=>EDGES.push({s:g.cat,t:g.id,kind:'hg',label:'part of'}));
 DATA.leaves.forEach(l=>EDGES.push({s:l.group,t:l.id,kind:'rg',label:'part of'}));
 DATA.ties.forEach(x=>EDGES.push({s:x.s,t:x.t,kind:'x',label:x.label}));
@@ -195,7 +203,11 @@ const HUB_R=520;
 const root=byId.get(DATA.root.id);root.fx=0;root.fy=0;
 document.getElementById('root-name').textContent=DATA.root.label;
 document.getElementById('root-reset').textContent='Reset to '+DATA.root.label;
-HUBS.forEach(h=>{h.ax=Math.cos(HUB_ANGLE[h.cat])*HUB_R;h.ay=Math.sin(HUB_ANGLE[h.cat])*HUB_R;h.x=h.ax;h.y=h.ay;});
+HUBS.forEach(h=>{
+  if(HUB_POS&&HUB_POS[h.cat]){h.ax=HUB_POS[h.cat][0];h.ay=HUB_POS[h.cat][1];}
+  else{h.ax=Math.cos(HUB_ANGLE[h.cat])*HUB_R;h.ay=Math.sin(HUB_ANGLE[h.cat])*HUB_R;}
+  h.x=h.ax;h.y=h.ay;
+});
 /* Each project owns an equal sector of the circle; its cluster fan must stay
    inside it. A fixed .5 rad step wraps the whole circle once a project has
    ~13+ clusters (generated data easily does), seeding clusters in other
@@ -204,6 +216,15 @@ HUBS.forEach(h=>{h.ax=Math.cos(HUB_ANGLE[h.cat])*HUB_R;h.ay=Math.sin(HUB_ANGLE[h
 const SECTOR=Math.PI*2/Math.max(1,Object.keys(HUB_ANGLE).length);
 GROUPS.forEach(g=>{
   const sib=GROUPS.filter(x=>x.cat===g.cat),k=sib.indexOf(g),m=sib.length;
+  if(HUB_POS&&HUB_POS[g.cat]){
+    /* anchored hub: fan the clusters in a full ring around it — the region
+       is its own little galaxy, not a slice of the shared circle */
+    const a=-Math.PI/2+k/Math.max(1,m)*Math.PI*2;
+    const r=170+(k%3)*55;
+    g.x=HUB_POS[g.cat][0]+Math.cos(a)*r;
+    g.y=HUB_POS[g.cat][1]+Math.sin(a)*r;
+    return;
+  }
   const step=Math.min(.5,SECTOR*.85/Math.max(1,m));
   const a=HUB_ANGLE[g.cat]+(k-(m-1)/2)*step;
   const r=HUB_R+170+(k%3)*70;
@@ -247,7 +268,7 @@ function simTick(){
   for(const e of es){
     const a=byId.get(e.s),b=byId.get(e.t),sp=SPR[e.kind];
     let dx=b.x-a.x,dy=b.y-a.y;
-    const d=Math.max(1,Math.hypot(dx,dy)),f=(d-sp.d)*sp.k*simAlpha;
+    const d=Math.max(1,Math.hypot(dx,dy)),f=(d-(e.d||sp.d))*sp.k*simAlpha;
     const fx=dx/d*f,fy=dy/d*f;
     if(a.fx==null){a.vx+=fx;a.vy+=fy;}
     if(b.fx==null){b.vx-=fx;b.vy-=fy;}
@@ -351,9 +372,15 @@ function convexHull(points){
 }
 function drawEnclosures(k){
   const PAD=42;
+  /* One hull per category, not per group: with several clusters in a region
+     (the eight-region dashboard) a per-group loop would restroke the same
+     region hull once per cluster and the fills would stack. */
+  const seen=new Set();
   for(const group of GROUPS){
+    if(seen.has(group.cat))continue;
+    seen.add(group.cat);
     if(deptFilter&&group.cat!==deptFilter)continue;
-    const points=[[group.x,group.y]];
+    const points=GROUPS.filter(g=>g.cat===group.cat).map(g=>[g.x,g.y]);
     for(const leaf of LEAVES){
       if(isShown(leaf)&&belongsToCategory(leaf,group.cat)){
         points.push([leaf.x,leaf.y]);
@@ -535,7 +562,7 @@ function drawGraph(now){
       if(!(on||k>.8))continue;
       const closed=!expanded.get(n.id);
       gc.font='400 9px '+MONO;
-      const t=n.label.toUpperCase()+(closed?` +${LEAVES.filter(l=>belongsToCategory(l,n.cat)).length}`:'');
+      const t=n.label.toUpperCase()+(closed?` +${LEAVES.filter(l=>l.group===n.id).length}`:'');
       halo(t,sx,sy-n.r*k-7,`rgba(179,173,160,${.72*a})`,.1);
     }else if(n.type==='leaf'){
       const on=n.id===hoverId||n.id===selId||n.id===rootId||(focusSet&&focusSet.has(n.id))||(pathIds&&pathIds.includes(n.id));
@@ -802,7 +829,7 @@ function showHC(n,mx,my){
       <dt>Ties</dt><dd>${n.degree-1} connection${n.degree-1===1?'':'s'} · ${esc(byId.get(n.group).label)}</dd>
     </dl>`;
   }else if(n.type==='group'){
-    const kids=LEAVES.filter(l=>belongsToCategory(l,n.cat));
+    const kids=LEAVES.filter(l=>l.group===n.id);
     const dates=kids.map(x=>x.date).filter(Boolean).sort();
     const span=dates.length
       ?`<dt>Span</dt><dd>${fmtMY(+new Date(dates[0]))} to ${fmtMY(+new Date(dates.at(-1)))}</dd>`
@@ -837,7 +864,7 @@ const panel=document.getElementById('panel');
 function openPanel(n){
   const col=n.type==='root'?ACCENT_DEEP:CAT[n.cat].color;
   const kick=n.type==='hub'?`${hubLabel} · ${LEAVES.filter(l=>belongsToCategory(l,n.cat)).length} ${noun}`
-    :n.type==='group'?`${CAT[n.cat].name} · environment`
+    :n.type==='group'?`${CAT[n.cat].name} · ${collectionLabel.replace(/s$/,'')}`
     :n.type==='root'?'The center'
     :`${CAT[n.cat].name} · ${n.tag}`;
   const conns=n.adj
@@ -952,8 +979,11 @@ let satHover=null;   /* key of the hovered dot */
 let satPulse=null;   /* {key,t0} — panel row clicked, flash its dot */
 const satCache=new Map();
 
-/* The one gate. Everything else early-returns on a null host. */
-const todoProjectId=n=>bootDataset==='dashboard'&&n&&n.type==='leaf'?n.id:null;
+/* The one gate. Everything else early-returns on a null host. Only project
+   leaves (xotype 'output', plain project-id ids) have todos — the other
+   dashboard regions hold files, sessions and tools, and asking the todos API
+   about those would just paint an error note in every panel. */
+const todoProjectId=n=>bootDataset==='dashboard'&&n&&n.type==='leaf'&&n.xotype==='output'?n.id:null;
 
 function shapeTodos(res){
   if(!res.ok){

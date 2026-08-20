@@ -4,8 +4,9 @@ Two questions the Space UI's snapshot view asks, both answered live from
 the project's own repository via services/cowork_agent/git_snapshot:
 
 - the commit list a project panel shows (newest first, bounded), and
-- one commit's full tree — every file with its size, plus what that
-  commit touched — which the UI renders as a clickable treemap.
+- one commit's full tree — every file with its size, what the commit
+  touched, and how many lines it changed there — which the UI renders as
+  a clickable 3D citymap whose terrain height is the churn.
 
 A project that is not its own git repository answers the list request
 with ``{git: false, commits: []}`` (a truthful empty shape, matching the
@@ -53,11 +54,19 @@ class SnapshotTreeEntry(BaseModel):
     size: int
 
 
+class FileChurn(BaseModel):
+    """Lines this commit changed in one file; None for binary (uncountable)."""
+
+    added: Optional[int] = None
+    deleted: Optional[int] = None
+
+
 class CommitSnapshotResponse(BaseModel):
     project_id: str
     commit: CommitListItem
     tree: list[SnapshotTreeEntry]
     touched: dict[str, str]
+    churn: dict[str, FileChurn]
     deleted: list[str]
     truncated: bool
     total_files: int
@@ -136,6 +145,7 @@ def project_commit_snapshot(project_id: str, sha: str) -> CommitSnapshotResponse
         commit=CommitListItem(**snap["commit"]),
         tree=[SnapshotTreeEntry(**e) for e in snap["tree"]],
         touched=snap["touched"],
+        churn={p: FileChurn(**c) for p, c in snap["churn"].items()},
         deleted=snap["deleted"],
         truncated=snap["truncated"],
         total_files=snap["total_files"],

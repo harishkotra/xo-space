@@ -1,8 +1,9 @@
 """Commit history and per-commit tree snapshots, read straight from git.
 
-The Space UI's snapshot view asks three questions about a project:
+The Space UI's snapshot view asks four questions about a project:
 which commits exist, what did the whole tree look like at one commit,
-and what did one file contain at that commit. Each answer comes from a
+how much did each file change in that commit, and what did one file
+contain there. Each answer comes from a
 single git subprocess against the project's own repository — nothing is
 indexed or cached on disk, because a commit is immutable and the log is
 cheap at the depths the UI requests.
@@ -160,10 +161,54 @@ def commits_on_day(pdir: Path, day: str) -> Optional[list[dict]]:
     return [c for c in _parse_log(raw) if c["date"][:10] == day]
 
 
+def _parse_numstat(raw: bytes) -> dict[str, dict]:
+    """``diff-tree --numstat -z`` → path → {added, deleted}.
+
+    Records are ``added\tdeleted\tpath\0``; a rename instead emits an
+    empty path and follows with ``old\0new\0``, and the churn belongs to
+    the new path (the one that exists in this commit's tree). Binary files
+    report ``-`` for both counts — recorded as None rather than 0, because
+    "no text lines changed" and "we cannot count lines" are different
+    facts and the UI draws them differently.
+    """
+    out: dict[str, dict] = {}
+    fields = raw.split(b"\x00")
+    i = 0
+    while i < len(fields):
+        rec = fields[i]
+        if not rec:
+            i += 1
+            continue
+        parts = rec.split(b"\t")
+        if len(parts) < 3:
+            i += 1
+            continue
+        added_s, deleted_s, path_b = parts[0], parts[1], parts[2]
+        if path_b == b"":  # rename/copy: old and new follow as separate fields
+            if i + 2 >= len(fields):
+                break
+            path_b = fields[i + 2]
+            i += 3
+        else:
+            i += 1
+        def _num(v: bytes) -> Optional[int]:
+            try:
+                return int(v)
+            except ValueError:
+                return None  # "-" for binary
+        out[path_b.decode("utf-8", errors="replace")] = {
+            "added": _num(added_s),
+            "deleted": _num(deleted_s),
+        }
+    return out
+
+
 def commit_snapshot(pdir: Path, sha: str) -> Optional[dict]:
     """The full tree at one commit, plus what that commit touched.
 
-    Returns ``{commit, tree, touched, deleted, truncated, total_files}``:
+    Returns ``{commit, tree, touched, churn, deleted, truncated,
+    total_files}``: ``churn`` maps path → {added, deleted} line counts for
+    this commit, which the UI raises as terrain height —
     ``tree`` is every blob as ``{path, size}``; ``touched`` maps path →
     A/M/R for files present in the snapshot that this commit changed;
     ``deleted`` lists paths the commit removed (absent from the tree by
@@ -243,10 +288,21 @@ def commit_snapshot(pdir: Path, sha: str) -> Optional[dict]:
             else:
                 break
 
+    # A second cheap pass: name-status answers "what kind of change",
+    # numstat answers "how big". Both are one diff-tree over the same
+    # commit, so the pair costs no walk the UI could avoid.
+    churn = _parse_numstat(
+        _run_git(
+            pdir, "diff-tree", "--no-commit-id", "--numstat",
+            "-r", "-z", "--root", ref, "--",
+        ) or b""
+    )
+
     return {
         "commit": meta[0],
         "tree": tree,
         "touched": touched,
+        "churn": {p: c for p, c in churn.items() if p in touched},
         "deleted": deleted,
         "truncated": truncated,
         "total_files": total,

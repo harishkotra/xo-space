@@ -100,6 +100,39 @@ class GitSnapshotServiceTests(unittest.TestCase):
             self.repo, oldest["sha"], "docs/guide.md", max_bytes=64
         ))
 
+    def test_churn_carries_line_counts_per_file(self) -> None:
+        newest, oldest = self._shas()
+        snap = git_snapshot.commit_snapshot(self.repo, newest["sha"])
+        churn = snap["churn"]
+        # a.py went from one line to two: +1, -0
+        self.assertEqual(churn["a.py"], {"added": 1, "deleted": 0})
+        # b.txt is new: one added line
+        self.assertEqual(churn["b.txt"], {"added": 1, "deleted": 0})
+        # churn is scoped to files present in this commit's tree, so the
+        # deleted guide does not appear beside files the map can draw
+        self.assertNotIn("docs/guide.md", churn)
+        self.assertEqual(set(churn), set(snap["touched"]))
+
+    def test_binary_churn_is_none_not_zero(self) -> None:
+        """"cannot count lines" and "changed no lines" are different facts.
+
+        Built in its own repository: the shared fixture's history is
+        asserted commit-for-commit by every other test here.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            r = Path(tmp) / "bin"
+            r.mkdir()
+            _git(r, "init", "-q")
+            (r / "blob.bin").write_bytes(bytes(range(256)) * 8)
+            (r / "notes.txt").write_text("hello\n")
+            _git(r, "add", "-A")
+            _git(r, "commit", "-q", "-m", "add a binary and a text file")
+            sha = git_snapshot.list_commits(r, limit=1)[0]["sha"]
+            churn = git_snapshot.commit_snapshot(r, sha)["churn"]
+            self.assertEqual(churn["blob.bin"], {"added": None, "deleted": None})
+            # the text file beside it still counts normally
+            self.assertEqual(churn["notes.txt"], {"added": 1, "deleted": 0})
+
     def test_hostile_input_never_reaches_git(self) -> None:
         self.assertIsNone(git_snapshot.normalize_sha("HEAD"))
         self.assertIsNone(git_snapshot.normalize_sha("--exec=x"))
@@ -191,6 +224,49 @@ class SnapshotWiringTests(unittest.TestCase):
         # dirLabels: LOD threshold and label budget
         self.assertIn("LABEL_MIN_SUBTREE_PX=60", src)
         self.assertIn("LABEL_BUDGET=120", src)
+
+    def test_three_is_vendored_and_self_contained(self) -> None:
+        """The browser imports three directly — so every specifier it
+        reaches for must resolve on disk, with no bundler and no CDN."""
+        vendor = ROOT / "space_ui" / "vendor"
+        for name in ("three.module.min.js", "three.core.min.js",
+                     "OrbitControls.js"):
+            self.assertTrue((vendor / name).is_file(), f"missing {name}")
+        orbit = (vendor / "OrbitControls.js").read_text(encoding="utf-8")
+        # a bare "three" specifier would 404 in a browser with no importmap
+        self.assertNotIn("from 'three'", orbit)
+        self.assertIn("from './three.module.min.js'", orbit)
+        # three.module re-exports its core chunk; that file must be here too
+        module = (vendor / "three.module.min.js").read_text(encoding="utf-8")
+        self.assertIn("three.core.min.js", module)
+
+    def test_snapshot_renders_in_3d_and_loads_three_lazily(self) -> None:
+        src = (ROOT / "space_ui" / "js" / "views" / "snapshot.js").read_text(
+            encoding="utf-8"
+        )
+        # dynamic import: nobody who never opens a snapshot pays for three
+        self.assertIn("import('../../vendor/three.module.min.js')", src)
+        self.assertNotIn("import * as THREE from", src)
+        self.assertIn("WebGLRenderer", src)
+        self.assertIn("OrbitControls", src)
+        # light is data: the terrain is the one emissive material, and
+        # vertexColors must stay off (BoxGeometry carries no colour
+        # attribute — instanceColor does the work, see setColorAt)
+        self.assertIn("MeshBasicMaterial({toneMapped:false})", src)
+        self.assertNotIn("vertexColors:true", src)
+
+    def test_height_encodes_depth_of_change(self) -> None:
+        src = (ROOT / "space_ui" / "js" / "views" / "snapshot.js").read_text(
+            encoding="utf-8"
+        )
+        # churn drives terrain height, with both height modes offered
+        self.assertIn("function churnHeight(", src)
+        self.assertIn("CHURN_GAMMA", src)
+        self.assertIn('data-h="churn"', src)
+        self.assertIn('data-h="size"', src)
+        # size mode is Space Walk's own locHeights fallback
+        self.assertIn("LOC_HEIGHT_GAMMA=2.2", src)
+        self.assertIn("LOC_MAX_H=16", src)
 
     def test_previewer_forwards_the_ref(self) -> None:
         preview = (ROOT / "space_ui" / "js" / "core" / "preview.js").read_text(
