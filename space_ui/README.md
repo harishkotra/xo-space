@@ -30,7 +30,6 @@ directly. Descended from the single-file xo-atlas `v3.html`.
 | `js/views/sessions.js` | The Sessions (Argus telemetry) view. |
 | `js/views/projects.js` | The Files List lens: project list with per-project drawers (folder browser via `/tree`, todos, open sessions, recent events). Owns the `Files` tab; Graph and Tree are sibling lenses (`nav:false`, `parent:'projects'`). |
 | `js/views/tree.js` | The Files Tree lens: horizontal hierarchy over the same `space.json` dataset as Graph — folders as columns, files stacked beside their parent. Deep-link `#/tree`. |
-| `js/views/chat.js` | The Chat view: Plane-B chat (`/api/chat/prompt` → SSE stream → transcript refetch) with session sidebar, project binding for new sessions, and mini-markdown rendering. Works across claude_code / hermes / openclaw. Deliberately unregistered — no tab. |
 | `js/views/wiki.js` | The Wiki view: bundled, version-matched operating documentation. It includes storage architecture, watcher internals, complete `.xo` / `.quirq` data catalogs, and flow-building recipes. |
 | `js/views/quirq.js` | The Quirq view: machine-local `.quirq` watcher state beside portable project `.xo` output. No tab of its own — `nav:false, parent:'secrets'`, opened from Setup's header button (`#/quirq`). |
 | `js/views/secrets.js` | The Setup view: storage roots, agent runtime, watcher coverage, write-only credentials, git self-update, managed restart. |
@@ -42,20 +41,24 @@ rules are in the root `AGENTS.md`.
 
 ## How it's served
 
-`routers/space.py` mounts this folder read-only at `/space` (so the app is at
-`http://localhost:5002/space/`) and registers `GET /space/data/space.json`
-**before** the mount — the graph data the page fetches is generated live from
-`~/xo-projects` by `services/cowork_agent/visualizer/space_index.py`. If the
-builder throws, the route answers 503 and the app shows its "no data source"
-panel. (The route can also fall back to a `data/space.json` file in this
-folder; none is bundled — a wrong-looking demo map beats nothing, but a
-truthful error panel beats both.)
+`routers/space.py` mounts this folder read-only at `/space`, so the app is at
+`http://localhost:5002/space/`. It serves the page only — the **data** comes
+from `routers/xo_data.py`, which hands over the workspace `.xo` directory at
+`/xo/*.json`, one URL per file (`GET /xo/space.json` is
+`<XO root>/.xo/space.json`). The watcher materialises those files; a file that
+is missing, empty or stale is rebuilt in a worker thread and written back, so
+the answer the browser gets and the file on disk never diverge. When a payload
+cannot be produced the route answers 503 and the app shows its "no data
+source" panel.
+
+The one data route still on this mount is `GET /space/data/session_prompts.json`
+— a per-session lookup rather than a workspace file.
 
 - Override the folder with the `SPACE_DIR` env var (e.g. to point at a live
   xo-atlas checkout during UI development).
-- The footer server pill polls `GET /space/server/status`. (The backend also
-  exposes `POST /space/server/stop`, localhost-only, but the UI deliberately
-  carries no stop control.)
+- The footer server pill polls `GET /space/server/status`. There is no stop
+  endpoint and no stop control: starting or stopping the server is a shell
+  operation.
 
 Local change vs upstream xo-atlas: `simTick()` clamps per-tick node velocity
 to 60 units — generated data can put 100+ leaves in one cluster, whose summed
@@ -71,7 +74,7 @@ Space theme. It lives in its own module (`js/views/sessions.js`), independent
 of the atlas's `boot()` — either can fail without taking the other down, and
 the registry keeps the tabs switchable regardless.
 
-- Data: `GET /space/data/sessions.json`, one pre-aggregated payload built
+- Data: `GET /xo/sessions.json`, one pre-aggregated payload built
   live from the Argus DB (`ARGUS_DB` env, default `~/.argus/argus.db`) by
   `services/cowork_agent/visualizer/argus_index.py`. Fetched lazily on
   first open; the Refresh button re-fetches (server rebuilds behind the
