@@ -672,6 +672,7 @@ function select(id,depth,fly=true){
   document.getElementById('crumb').classList.add('is-on');
   openPanel(n);
   syncSats(n);
+  syncCommits(n);
   if(fly){
     const kT=Math.max(cam.k,1.6);
     const off=GW>760?PANEL_W/2/kT:0;
@@ -865,6 +866,7 @@ function openPanel(n){
     </div>
     <div class="psec"><h4>About</h4><p>${esc(n.blurb||'')}</p></div>
     ${todoSectionHTML(n)}
+    ${commitSectionHTML(n)}
     ${conns?`<div class="psec"><h4>Connections</h4>${conns}</div>`:''}
     <div class="pacts">
       ${n.type==='leaf'||n.type==='group'?`<button data-act="timeline">Show on timeline</button>`:''}
@@ -891,6 +893,13 @@ panel.addEventListener('click',e=>{
   const row=e.target.closest('.ptodo');
   if(row){
     satPulse={key:row.dataset.todo,t0:performance.now()};
+    return;
+  }
+  const pc=e.target.closest('.pcommit');
+  if(pc&&comHost){
+    dispatchEvent(new CustomEvent('space:show-commit',
+      {detail:{project:comHost,sha:pc.dataset.sha}}));
+    go('snapshot');
     return;
   }
   const a=e.target.closest('[data-act]');
@@ -1170,6 +1179,71 @@ function renderTodoSection(){
   const el=document.getElementById('panel-todos');
   if(!el||panel.dataset.id!==satHost)return;
   el.innerHTML=todoBodyHTML();
+}
+
+/* ===================== PANEL COMMITS (graph hubs) ===================== */
+/* The graph dataset's project hubs each carry a real repository; their
+   panel lists recent commits, and a click opens the Snapshot view — the
+   whole tree as it stood at that commit. Same shape as the todos block
+   above: one gate, a token against stale responses, a small TTL cache so
+   re-selecting a project is instant, and subtree patching so the panel
+   never loses its scroll position. */
+const commitProjectId=n=>bootDataset==='graph'&&n&&n.type==='hub'?n.id.replace(/^p_/,''):null;
+const COM_TTL=30000,COM_ROWS=12;
+let comHost=null,comNodeId=null,comState='idle',comRows=[],comNote='',comToken=0;
+const comCache=new Map();
+
+function commitSectionHTML(n){
+  return commitProjectId(n)?`<div class="psec" id="panel-commits">${commitBodyHTML()}</div>`:'';
+}
+function commitBodyHTML(){
+  const head=`<h4>Commits</h4>`;
+  if(comState==='loading')return head+`<div class="prj-note">reading git log&hellip;</div>`;
+  if(comState==='error')return head+`<div class="prj-note">${esc(comNote)}</div>`;
+  if(comState!=='ready')return head;
+  if(!comRows.length)return head+`<div class="prj-note">${esc(comNote||'no commits yet')}</div>`;
+  const shown=comRows.slice(0,COM_ROWS);
+  return head
+    +`<div class="prj-commits">`+shown.map(c=>
+      `<button class="pcommit" data-sha="${esc(c.sha)}" title="Open the snapshot at ${esc(c.short)}">
+        <code>${esc(c.short)}</code>
+        <span class="csub">${esc(c.subject)}</span>
+        <span class="cmeta">${esc((c.date||'').slice(0,10))}${c.files_changed!=null?' \u00b7 '+c.files_changed+'f':''}</span>
+      </button>`).join('')+`</div>`
+    +(comRows.length>shown.length?`<div class="prj-note">${shown.length} of ${comRows.length} fetched</div>`:'');
+}
+function renderCommitSection(){
+  const el=document.getElementById('panel-commits');
+  if(!el||panel.dataset.id!==comNodeId)return;
+  el.innerHTML=commitBodyHTML();
+}
+function syncCommits(n){
+  const pid=commitProjectId(n);
+  if(pid&&pid===comHost){renderCommitSection();return;}
+  comToken++;comHost=pid;comNodeId=n?n.id:null;
+  comState='idle';comRows=[];comNote='';
+  if(!pid)return;
+  const hit=comCache.get(pid);
+  if(hit&&performance.now()-hit.t<COM_TTL){
+    comState=hit.state;comRows=hit.rows;comNote=hit.note;
+    renderCommitSection();return;
+  }
+  comState='loading';renderCommitSection();
+  loadCommits(pid,comToken);
+}
+async function loadCommits(pid,tok){
+  const res=await apiFetch(API_BASE+'/api/xo-projects/'+encodeURIComponent(pid)+'/commits?limit=30');
+  if(tok!==comToken)return; /* a newer selection owns the panel */
+  if(!res.ok){
+    comState='error';
+    comNote=res.offline?'xo-cowork-api is unreachable':String(res.error||'could not read commits');
+  }else{
+    comState='ready';
+    comRows=res.data.commits||[];
+    comNote=res.data.git===false?'not a git repository':'';
+  }
+  comCache.set(pid,{t:performance.now(),state:comState,rows:comRows,note:comNote});
+  renderCommitSection();
 }
 
 /* ============================== SEARCH ============================== */

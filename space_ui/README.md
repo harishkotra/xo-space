@@ -33,6 +33,7 @@ directly. Descended from the single-file xo-atlas `v3.html`.
 | `js/views/chat.js` | The Chat view: Plane-B chat (`/api/chat/prompt` → SSE stream → transcript refetch) with session sidebar, project binding for new sessions, and mini-markdown rendering. Works across claude_code / hermes / openclaw. Deliberately unregistered — no tab. |
 | `js/views/wiki.js` | The Wiki view: bundled, version-matched operating documentation. It includes storage architecture, watcher internals, complete `.xo` / `.quirq` data catalogs, and flow-building recipes. |
 | `js/views/quirq.js` | The Quirq view: machine-local `.quirq` watcher state beside portable project `.xo` output. No tab of its own — `nav:false, parent:'secrets'`, opened from Setup's header button (`#/quirq`). |
+| `js/views/snapshot.js` | The Snapshot view: one commit rendered as a squarified treemap of the whole repository at that moment — touched files lit (added/modified/renamed), every file clickable into the previewer pinned to that commit. No tab — `nav:false, parent:'projects'`, opened from a project's commit list in the Graph panel via `space:show-commit`. |
 | `js/views/secrets.js` | The Setup view: storage roots, agent runtime, watcher coverage, write-only credentials, git self-update, managed restart. |
 | `js/core/markdown.js` | Escape-first mini-markdown (fences, inline code, bold/italic, links, headings, lists). |
 

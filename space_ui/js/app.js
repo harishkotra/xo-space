@@ -14,6 +14,7 @@ import treeView from './views/tree.js?v=20260825-rename1';
 import wikiView from './views/wiki.js?v=20260827-htmlfix1';
 import quirqView from './views/quirq.js?v=20260817-plural1';
 import secretsView from './views/secrets.js?v=20260825-installlink1';
+import snapshotView from './views/snapshot.js?v=20260820-snapshot1';
 
 /* app-shell bulkhead: a fatal script error logs instead of white-screening */
 addEventListener('error',e=>console.error('Space shell error:',e.error||e.message));
@@ -32,6 +33,7 @@ try{
   registerView(treeView);
   registerView(wikiView);
   registerView(quirqView);
+  registerView(snapshotView);
   registerView(secretsView);
   startRegistry({defaultView:'dashboard'});
 }catch(err){console.error('Space registry failed to start:',err);}
