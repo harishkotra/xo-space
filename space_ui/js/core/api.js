@@ -21,7 +21,7 @@ export const API_BASE=location.pathname.startsWith('/space')?'':'http://127.0.0.
 
 /* merge the page's query string into a path that may already carry one —
    naive concatenation would produce "…?limit=30?token=…" */
-export function withPageQuery(path){
+function withPageQuery(path){
   const ps=location.search.replace(/^\?/,'');
   if(!ps)return path;
   return path+(path.includes('?')?'&':'?')+ps;

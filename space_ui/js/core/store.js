@@ -20,6 +20,6 @@ export function setSlottedInterval(name,fn,ms){
   clearSlottedInterval(name);
   slots.set(name,setInterval(fn,ms));
 }
-export function clearSlottedInterval(name){
+function clearSlottedInterval(name){
   if(slots.has(name)){clearInterval(slots.get(name));slots.delete(name);}
 }

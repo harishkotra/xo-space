@@ -299,13 +299,6 @@ function stepCam(now){
   cam.k=camAnim.from.k+(camAnim.to.k-camAnim.from.k)*e;
   if(t>=1)camAnim=null;
 }
-function fitNodes(ids,pad=120,kmax=2.2){
-  const ns=ids.map(id=>byId.get(id));
-  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
-  ns.forEach(n=>{x0=Math.min(x0,n.x);y0=Math.min(y0,n.y);x1=Math.max(x1,n.x);y1=Math.max(y1,n.y);});
-  const k=Math.max(.25,Math.min(kmax,.9*Math.min(GW/(x1-x0+pad),GH/(y1-y0+pad))));
-  flyTo((x0+x1)/2,(y0+y1)/2,k,900);
-}
 
 /* ============================== GRAPH RENDER ============================== */
 const gcv=document.getElementById('gcanvas'),gc=gcv.getContext('2d');

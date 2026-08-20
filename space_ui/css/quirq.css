@@ -48,7 +48,6 @@
 .quirq-storage-row>span{padding:3px 6px;border:1px solid var(--line-soft);border-radius:999px;font:600 7.5px var(--mono);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3)}
 .quirq-storage-row>span.is-local{color:#82b3e5;border-color:rgba(130,179,229,.2)}
 .quirq-storage-row>span.is-project,.quirq-storage-row>span.is-workspace{color:var(--accent-deep);border-color:rgba(168,217,79,.18)}
-.quirq-storage-empty{padding:26px 8px;color:var(--ink-4);font-size:10px;text-align:center}
 .quirq-storage-actions{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:12px 19px;border-top:1px solid var(--line-soft);background:rgba(255,255,255,.01)}
 .quirq-storage-actions>p{max-width:590px;font-size:9.5px;line-height:1.5;color:var(--ink-3)}
 .quirq-storage-actions>p b{color:#e2ae5b}
