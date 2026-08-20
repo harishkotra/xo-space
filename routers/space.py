@@ -1,7 +1,7 @@
 """Space: the local workspace knowledge graph.
 
 Serves the Space UI folder as static files under /space, plus a tiny control
-API the UI uses for its server on/off widget and the Setup tab's self-update.
+API the UI uses for its server status pill and the Setup tab's self-update.
 
 The folder location comes from SPACE_DIR (env), defaulting to space_ui/ in the
 repo. The UI's DATA comes from the workspace .xo directory via /xo/*.json
@@ -10,7 +10,6 @@ repo. The UI's DATA comes from the workspace .xo directory via /xo/*.json
 
 import asyncio
 import os
-import signal
 import time
 from pathlib import Path
 
@@ -40,20 +39,6 @@ async def space_server_status():
         "space_dir": str(SPACE_DIR),
         "space_dir_exists": SPACE_DIR.exists(),
     }
-
-
-@router.post("/server/stop")
-async def space_server_stop(request: Request):
-    """Gracefully stop the server. Localhost only; restart via ./cowork-api.sh start."""
-    if not _is_local(request):
-        raise HTTPException(status_code=403, detail="stop is allowed from localhost only")
-
-    async def _terminate_soon():
-        await asyncio.sleep(0.4)
-        os.kill(os.getpid(), signal.SIGTERM)
-
-    asyncio.get_running_loop().create_task(_terminate_soon())
-    return {"status": "stopping", "restart": "./cowork-api.sh start"}
 
 
 @router.get("/update/status")
