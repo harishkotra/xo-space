@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import Optional, Dict, Any, AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import StreamingResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import dotenv_values, load_dotenv
@@ -826,8 +826,17 @@ mount_space(app)
 # =============================================================================
 
 @app.get("/")
-async def root():
-    """Root endpoint."""
+async def root(request: Request):
+    """Root endpoint.
+
+    Browsers (``Accept: text/html``) are redirected to the Space UI at
+    ``/space/``; API clients and health checks still receive the JSON status.
+    This lets the workspace root URL land on the UI when the API is proxied at
+    the port root (e.g. a Coder subdomain app whose base is the port itself,
+    not ``/space``) — the UI then talks to the API same-origin.
+    """
+    if "text/html" in request.headers.get("accept", ""):
+        return RedirectResponse(url="/space/", status_code=307)
     return {"status": "XO Cowork API running"}
 
 
