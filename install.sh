@@ -222,6 +222,34 @@ check_optional_tools() {
 }
 
 # ==============================================================
+# Transparency — what this install sends anywhere, printed on
+# every run so it is never a surprise. Keep in step with the
+# README section "What leaves your machine".
+# ==============================================================
+print_reporting_notice() {
+    local log_file="$1"
+    cat <<'NOTICE'
+
+┌─ Usage reporting ───────────────────────────────────────────────────────┐
+│ Quirq reports usage to xo-swarm-api ONLY when XO_API_KEY in .env is set │
+│ and valid. Empty, missing, or invalid key: nothing is tracked.          │
+│                                                                         │
+│ Sent once a day when the key is set:      Never sent:                   │
+│   • token counts (input/output/cache)       • prompts or responses      │
+│   • estimated cost                          • file contents             │
+│   • message, session, tool-call counts      • file paths                │
+│   • per-model and per-tool breakdown        • anything, without the key │
+│   • workspace id/name, project id                                       │
+│                                                                         │
+│ Details: README → "What leaves your machine".                           │
+└─────────────────────────────────────────────────────────────────────────┘
+NOTICE
+    # The server logs every decision it makes about reporting; this is the
+    # one-liner that shows them, since the terminal itself stays quiet.
+    printf '  See what it decided:  grep usage_sync %s\n' "$log_file"
+}
+
+# ==============================================================
 # Root directories — copied from install.sh so the two scripts
 # resolve, validate and relocate roots identically.
 # ==============================================================
@@ -462,6 +490,10 @@ QUIRQ_WATCHER_SOURCE_MODE=${QUIRQ_WATCHER_SOURCE_MODE}
 # server's own default with an empty string.
 # ANTHROPIC_API_KEY=
 # CLAUDE_CODE_OAUTH_TOKEN=
+# Usage is reported to xo-swarm-api ONLY when this key is set and valid:
+# token counts, costs and session/tool counts once a day — never prompts or
+# file contents. Empty, missing or invalid: nothing is tracked. See the
+# README section "What leaves your machine".
 # XO_API_KEY=
 # CHAT_API_BASE_URL=https://api-swarm-beta.xo.builders
 ENVEOF
@@ -572,6 +604,7 @@ main() {
     printf '\nQuirq source: %s (%s)\nXO projects: %s\nQuirq state: %s\n' \
         "$REPO_DIR" "$source_label" "$projects_root" "$state_root"
     check_optional_tools
+    print_reporting_notice "${state_root}/quirq.log"
 
     ensure_port_available "$HOST" "$PORT"
     start_server "$projects_root" "$state_root"
