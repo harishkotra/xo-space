@@ -65,6 +65,8 @@ REPO_NAME="${REPO_NAME%.git}"
 APP_DIR="${QUIRQ_APP_DIR:-${LAUNCH_DIR}/${REPO_NAME}}"
 PYTHON_VERSION="${QUIRQ_PYTHON_VERSION:-3.12}"
 UV_INSTALL_URL="https://astral.sh/uv/install.sh"
+# The canonical one-liner (INSTALLATION.md), echoed back as the update path.
+INSTALL_URL="https://quirq.ai/install"
 
 # Set by resolve_repo_dir, once we know whether we are running from a
 # checkout or have to create one.
@@ -112,6 +114,23 @@ resolve_repo_dir() {
         return
     fi
 
+    # Piped from curl while standing inside a checkout — typically someone
+    # re-running the one-liner from ./xo-space instead of from the workspace
+    # above it. Nesting a second clone in there would make this checkout the
+    # projects root and leave it permanently dirty (so it would never update
+    # again). Use it as the managed checkout and its parent as the workspace:
+    # exactly what running the same command one level up does. An explicit
+    # QUIRQ_APP_DIR still wins.
+    if [ -z "${QUIRQ_APP_DIR:-}" ] &&
+        [ -f "${LAUNCH_DIR}/server.py" ] &&
+        [ -f "${LAUNCH_DIR}/requirements.txt" ]; then
+        REPO_DIR="$LAUNCH_DIR"
+        LAUNCH_DIR="$(cd "${LAUNCH_DIR}/.." && pwd)"
+        MANAGED_CHECKOUT=1
+        printf 'Running from inside the Quirq checkout; the workspace is %s\n' "$LAUNCH_DIR"
+        return
+    fi
+
     REPO_DIR="$APP_DIR"
     MANAGED_CHECKOUT=1
 }
@@ -125,6 +144,17 @@ fetch_repo() {
         printf 'Quirq is already installed here: %s\n' "$REPO_DIR"
         if [ -n "$(git -C "$REPO_DIR" status --porcelain)" ]; then
             printf 'It has local changes — keeping them, skipping the update.\n'
+            return
+        fi
+        # A checkout on some other branch was put there on purpose (a
+        # development clone, say); resetting it to SOURCE_REF would silently
+        # move it. Managed clones are made with --branch SOURCE_REF, so they
+        # always pass this and keep updating.
+        local branch
+        branch="$(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+        if [ -n "$branch" ] && [ "$branch" != "HEAD" ] && [ "$branch" != "$SOURCE_REF" ]; then
+            printf 'It is on branch %s, not %s — leaving it as is. Set QUIRQ_SOURCE_REF=%s to track that branch instead.\n' \
+                "$branch" "$SOURCE_REF" "$branch"
             return
         fi
         printf 'Updating it to the latest %s...\n' "$SOURCE_REF"
@@ -539,6 +569,27 @@ start_server() {
     printf '\n▶️  Starting Quirq: http://localhost:%s/space/\n\n' "$PORT"
     printf '    Logs:  %s\n' "$log_file"
     printf '    Press Ctrl-C to stop.\n\n'
+    print_restart_hint
+}
+
+# ==============================================================
+# How to come back. Once Ctrl-C returns the prompt there is nothing on
+# screen that says how to start again, and "run the installer command"
+# is only obvious to whoever ran it first. Printed before exec hands the
+# terminal to the server, since nothing of this script survives that.
+# ==============================================================
+print_restart_hint() {
+    local ref_prefix=""
+    [ "$SOURCE_REF" = "main" ] || ref_prefix="QUIRQ_SOURCE_REF=${SOURCE_REF} "
+
+    if [ "$MANAGED_CHECKOUT" -eq 1 ]; then
+        printf '    Start again later:  cd %s && %s/install.sh\n' "$LAUNCH_DIR" "$REPO_DIR"
+        printf '    Update and start:   cd %s && %scurl -fsSL %s | sh\n\n' \
+            "$LAUNCH_DIR" "$ref_prefix" "$INSTALL_URL"
+    else
+        printf '    Start again later:  cd %s && ./install.sh\n' "$REPO_DIR"
+        printf '    Update:             Setup tab → Update, or git pull --ff-only, then start again\n\n'
+    fi
 
     # exec replaces this shell so Ctrl-C reaches Uvicorn directly and no
     # wrapper lingers. If the server dies at boot, the prompt returns
