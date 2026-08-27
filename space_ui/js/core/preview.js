@@ -1,9 +1,14 @@
-/* File previewer — a side drawer that renders one file from a project.
+/* File previewer — a floating window that renders one file from a project.
 
    Lives in core/, not in a view, because three surfaces open it (the Tree
    lens, the Files explorer, the graph's detail panel) and views never import
    each other. They dispatch `space:preview-file` with {project, path, name}
    and this module owns everything after that.
+
+   It floats over the stage rather than docking to an edge: the window is
+   draggable by its header and resizable from its corner, and it keeps
+   whatever place the user drags it to for the rest of the session — the view
+   underneath never moves, which is the point of previewing.
 
    Rendering rules, in order of how much they matter:
      - markdown goes through core/markdown.js, which escapes before it
@@ -15,7 +20,12 @@
        holds the user's session;
      - anything else renders as escaped source text.
    The Source toggle shows raw text for every kind, which is also the escape
-   hatch when a render looks wrong. */
+   hatch when a render looks wrong.
+
+   The History button swaps the document for the file's git log (the
+   /file-history endpoint): who edited it, when, and how much. It is a second
+   mode of the same window, not a navigation — closing history returns to the
+   document exactly as it was. */
 import {API_BASE,apiFetch} from './api.js';
 import {mdToHtml} from './markdown.js';
 
@@ -36,6 +46,8 @@ let el=null,body=null;
 let current=null;   /* {project,path,name} */
 let data=null;      /* the loaded payload */
 let source=false;   /* Source toggle */
+let mode='file';    /* 'file' | 'history' */
+let hist=null;      /* the loaded /file-history payload, or null */
 let token=0;        /* race guard: only the newest request may paint */
 
 export function initPreview(){
@@ -43,8 +55,9 @@ export function initPreview(){
   if(!el)return;
   body=el.querySelector('#preview-body');
   el.addEventListener('click',onClick);
+  initDrag();
   addEventListener('space:preview-file',e=>open(e.detail||{}));
-  /* The drawer belongs to the Files context. The three lenses (List, Graph,
+  /* The window belongs to the Files context. The three lenses (List, Graph,
      Tree) all report tab 'projects' — see registry.js — so switching between
      them keeps the file open; landing on any other tab leaves it behind, a
      file preview having nothing to say about Sessions or Secrets. */
@@ -58,10 +71,37 @@ export function initPreview(){
   },true);
 }
 
+/* Drag by the header. The stylesheet anchors the window to the top-right by
+   default; the first drag converts that to explicit left/top once, and from
+   then on the coordinates are the source of truth. Clamped so the header can
+   never leave the viewport — a window you cannot grab cannot be recovered. */
+function initDrag(){
+  const header=el.querySelector('header');
+  header.addEventListener('pointerdown',e=>{
+    if(e.button!==0||e.target.closest('button'))return;
+    const r=el.getBoundingClientRect();
+    const dx=e.clientX-r.left,dy=e.clientY-r.top;
+    el.style.left=r.left+'px';el.style.top=r.top+'px';el.style.right='auto';
+    el.classList.add('is-dragging');
+    header.setPointerCapture(e.pointerId);
+    const move=ev=>{
+      el.style.left=Math.min(Math.max(ev.clientX-dx,64-el.offsetWidth),innerWidth-64)+'px';
+      el.style.top=Math.min(Math.max(ev.clientY-dy,0),innerHeight-48)+'px';
+    };
+    const up=()=>{
+      header.removeEventListener('pointermove',move);
+      header.removeEventListener('pointerup',up);
+      el.classList.remove('is-dragging');
+    };
+    header.addEventListener('pointermove',move);
+    header.addEventListener('pointerup',up);
+  });
+}
+
 async function open({project,path,name}){
   if(!el||!project||!path)return;
   current={project,path,name:name||path.split('/').pop()};
-  data=null;source=false;
+  data=null;hist=null;source=false;mode='file';
   const mine=++token;
   el.classList.add('is-open');
   render('<div class="pv-note">loading…</div>');
@@ -80,7 +120,7 @@ async function open({project,path,name}){
 }
 function close(){
   el.classList.remove('is-open');
-  current=null;data=null;token++;
+  current=null;data=null;hist=null;mode='file';token++;
   if(body)body.innerHTML='';
 }
 
@@ -90,6 +130,16 @@ function render(placeholder){
     ?current.project+'/'+current.path:'';
   const meta=el.querySelector('#preview-meta');
   const toggle=el.querySelector('#preview-source');
+  const histBtn=el.querySelector('#preview-history');
+  histBtn.textContent=mode==='history'?'Document':'History';
+  if(mode==='history'){
+    meta.textContent=hist?[hist.is_repo?'git history':'no repository',
+      hist.total?hist.total+(hist.total===1?' commit':' commits'):''
+      ].filter(Boolean).join(' · '):'';
+    toggle.hidden=true;
+    body.innerHTML=placeholder||historyHTML();
+    return;
+  }
   if(placeholder||!data){
     meta.textContent='';
     toggle.hidden=true;
@@ -114,17 +164,42 @@ const sourceHTML=d=>'<pre class="pv-src">'+esc(d.content)+'</pre>';
 const frameHTML=d=>'<iframe class="pv-frame" sandbox="" referrerpolicy="no-referrer" '
   +'title="'+esc(d.name)+' preview" srcdoc="'+esc(d.content)+'"></iframe>';
 
+function historyHTML(){
+  if(!hist)return'';
+  if(!hist.is_repo)return'<div class="pv-note">This file is not inside a git '
+    +'repository, so there is no edit history to show.</div>';
+  if(!hist.items.length)return'<div class="pv-note">No commits touch this file '
+    +'yet — it is new or untracked.</div>';
+  return'<ol class="pv-hist">'+hist.items.map(c=>{
+    const stat=(c.additions!=null||c.deletions!=null)
+      ?' · <b class="pv-add">+'+(c.additions??0)+'</b> <b class="pv-del">−'+(c.deletions??0)+'</b>':'';
+    return'<li><div class="pv-hist-head"><code>'+esc(c.short_hash)+'</code>'
+      +'<span>'+esc(c.subject)+'</span></div>'
+      +'<div class="pv-hist-meta">'+esc(c.author)+' · '+(rel(c.date)||esc(c.date||''))+stat+'</div></li>';
+  }).join('')+'</ol>';
+}
+
+async function loadHistory(){
+  const mine=token; /* same-file guard: open()/close() bump the token */
+  render('<div class="pv-note">reading git history…</div>');
+  const res=await apiFetch(API_BASE+'/api/xo-projects/'+encodeURIComponent(current.project)
+    +'/file-history?relative_path='+encodeURIComponent(current.path));
+  if(mine!==token||mode!=='history')return;
+  if(!res.ok){
+    render('<div class="pv-note">'+esc(
+      res.offline?'xo-space is unreachable':res.error||'Could not read the history.')+'</div>');
+    return;
+  }
+  hist=res.data;
+  render();
+}
+
 function onClick(e){
   if(e.target.closest('#preview-close')){close();return;}
   if(e.target.closest('#preview-source')){source=!source;render();return;}
-  if(e.target.closest('#preview-graph')&&current){
-    /* Explicit, never automatic: the point of the previewer is that opening a
-       file does NOT move you somewhere else. Leaf ids in space.json are
-       '<project>:<relative path>'; atlas parks the request if the graph has
-       not booted yet, so dispatch before the route change. */
-    dispatchEvent(new CustomEvent('space:focus-project',
-      {detail:current.project+':'+current.path}));
-    location.hash='#/graph';
-    close();
+  if(e.target.closest('#preview-history')&&current){
+    mode=mode==='history'?'file':'history';
+    if(mode==='history'&&!hist){loadHistory();return;}
+    render();
   }
 }

@@ -25,6 +25,7 @@ from routers.cowork_agent.bff.filters import (
     is_root_only_hidden,
 )
 from services.cowork_agent import scopes
+from services.cowork_agent.file_history import file_git_history
 from services.cowork_agent.project_layout import (
     list_project_tree,
     list_projects,
@@ -381,4 +382,86 @@ def project_file(project_id: str, relative_path: str) -> FilePreviewResponse:
         modified_at=_to_iso_utc(raw["modified_at"]),
         truncated=raw["truncated"],
         content=raw["content"],
+    )
+
+
+# ── /api/xo-projects/{id}/file-history ────────────────────────────────────────
+#
+# The previewer's History pane: commits that touched one file, newest first.
+# Same address space as /file — project id + project-relative path — with the
+# git specifics (repo discovery, --follow, numstat) in
+# services/cowork_agent/file_history.
+
+HISTORY_MAX_COMMITS = 200
+HISTORY_DEFAULT_COMMITS = 50
+
+
+class FileHistoryCommit(BaseModel):
+    """One commit touching the file.
+
+    ``additions``/``deletions`` are ``None`` when git has no counts to
+    give: a binary file, or a commit that only renamed it.
+    """
+
+    hash: str
+    short_hash: str
+    author: str
+    date: Optional[str] = None
+    subject: str
+    additions: Optional[int] = None
+    deletions: Optional[int] = None
+
+
+class FileHistoryResponse(BaseModel):
+    project_id: str
+    relative_path: str
+    is_repo: bool
+    items: list[FileHistoryCommit]
+    total: int
+
+
+@router.get(
+    "/api/xo-projects/{project_id}/file-history",
+    response_model=FileHistoryResponse,
+)
+def project_file_history(
+    project_id: str, relative_path: str, limit: int = HISTORY_DEFAULT_COMMITS
+) -> FileHistoryResponse:
+    """Return the git log of one project file's edits."""
+    if not project_dir_exists(project_id):
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "project_not_found", "message": "Project not found."},
+        )
+
+    try:
+        raw = file_git_history(
+            project_id, relative_path, limit=max(1, min(limit, HISTORY_MAX_COMMITS))
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "invalid_relative_path",
+                "message": "relative_path is malformed or escapes the project root.",
+            },
+        ) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "scope_unavailable", "message": "File is not readable."},
+        ) from exc
+
+    if raw is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "file_not_found", "message": "File not found in project."},
+        )
+
+    return FileHistoryResponse(
+        project_id=raw["project_id"],
+        relative_path=raw["relative_path"],
+        is_repo=raw["is_repo"],
+        items=[FileHistoryCommit(**item) for item in raw["items"]],
+        total=len(raw["items"]),
     )
