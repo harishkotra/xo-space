@@ -1,11 +1,12 @@
-/* The atlas views (Dashboard, Graph, Timeline): lenses over one selected
-   graph dataset. Dashboard uses dashboard.json while Graph uses space.json.
-   They share the model, camera, selection state and cross-view actions
-   inside one boot() closure, so they live in one module exporting three
-   views (splitting them would force cross-imports, which the view contract
-   forbids). Cross-view jumps go through ctx.switchTo (`go`). All graph
-   content comes from the workspace's .xo/space.json, served at /xo/space.json;
-   nothing is embedded here. */
+/* The atlas views (Graph, Timeline): lenses over the workspace graph
+   dataset (space.json). They share the model, camera, selection state and
+   cross-view actions inside one boot() closure, so they live in one module
+   exporting both views (splitting them would force cross-imports, which the
+   view contract forbids). Cross-view jumps go through ctx.switchTo (`go`).
+   All graph content comes from the workspace's .xo/space.json, served at
+   /xo/space.json; nothing is embedded here. (The Dashboard is no longer an
+   atlas lens — it is its own eight-region canvas in views/dashboard.js with
+   its own schema-2 data file.) */
 import {API_BASE,apiFetch} from '../core/api.js';
 import {toast} from '../core/ui.js';
 
@@ -25,7 +26,6 @@ addEventListener('space:focus-project',e=>{
 });
 
 const DATASETS={
-  dashboard:{url:API_BASE+'/xo/dashboard.json',label:'Dashboard'},
   graph:{url:API_BASE+'/xo/space.json',label:'Graph'}
 };
 const DATASET_KEY='space.atlasDataset';
@@ -95,10 +95,6 @@ function atlasView(id,label,order,lens,dataset=null){
     hide(){if(hooks.setActiveView)hooks.setActiveView(null);}
   };
 }
-export const dashboardView={
-  ...atlasView('dashboard','Dashboard',0,'graph','dashboard'),
-  section:'graph'
-};
 /* Files lands on the List lens (the projects view owns the nav tab); the
    Graph is its second lens, reachable from the pill or #/graph. */
 export const graphView={
@@ -116,10 +112,6 @@ function boot(DATA,DATA_SOURCE){
    All graph content comes from .xo/space.json (GET /xo/space.json); nothing is
    embedded here. */
 const CAT=DATA.categories;
-/* Optional fixed hub anchors ({cat:[x,y]} world coords). The eight-region
-   dashboard lays its hubs on a 2x4 grid; without this field the classic
-   circle-of-hubs seeding below applies unchanged. */
-const HUB_POS=DATA.hubPositions||null;
 const ACCENT='#a8d94f', ACCENT_DEEP='#83d63a';
 const graphRoute=bootDataset==='dashboard'?'dashboard':'graph';
 const hubLabel=DATA.meta.hubLabel||'Department';
@@ -132,11 +124,7 @@ DATA.leaves.forEach(l=>NODES.push({
   date:l.date,blurb:l.blurb,path:l.path,clusters:l.clusters||[],xotype:l.xotype
 }));
 const EDGES=[];
-/* Grid anchors sit at unequal distances from the root, so each root edge
-   carries its own rest length (e.d) — one shared spring distance would drag
-   every hub off its anchor. */
-DATA.hubs.forEach(h=>EDGES.push({s:DATA.root.id,t:h.id,kind:'root',label:DATA.meta.rootEdgeLabel||'a department of XO',
-  d:HUB_POS&&HUB_POS[h.cat]?Math.hypot(HUB_POS[h.cat][0],HUB_POS[h.cat][1]):undefined}));
+DATA.hubs.forEach(h=>EDGES.push({s:DATA.root.id,t:h.id,kind:'root',label:DATA.meta.rootEdgeLabel||'a department of XO'}));
 DATA.groups.forEach(g=>EDGES.push({s:g.cat,t:g.id,kind:'hg',label:'part of'}));
 DATA.leaves.forEach(l=>EDGES.push({s:l.group,t:l.id,kind:'rg',label:'part of'}));
 DATA.ties.forEach(x=>EDGES.push({s:x.s,t:x.t,kind:'x',label:x.label}));
@@ -203,11 +191,7 @@ const HUB_R=520;
 const root=byId.get(DATA.root.id);root.fx=0;root.fy=0;
 document.getElementById('root-name').textContent=DATA.root.label;
 document.getElementById('root-reset').textContent='Reset to '+DATA.root.label;
-HUBS.forEach(h=>{
-  if(HUB_POS&&HUB_POS[h.cat]){h.ax=HUB_POS[h.cat][0];h.ay=HUB_POS[h.cat][1];}
-  else{h.ax=Math.cos(HUB_ANGLE[h.cat])*HUB_R;h.ay=Math.sin(HUB_ANGLE[h.cat])*HUB_R;}
-  h.x=h.ax;h.y=h.ay;
-});
+HUBS.forEach(h=>{h.ax=Math.cos(HUB_ANGLE[h.cat])*HUB_R;h.ay=Math.sin(HUB_ANGLE[h.cat])*HUB_R;h.x=h.ax;h.y=h.ay;});
 /* Each project owns an equal sector of the circle; its cluster fan must stay
    inside it. A fixed .5 rad step wraps the whole circle once a project has
    ~13+ clusters (generated data easily does), seeding clusters in other
@@ -216,15 +200,6 @@ HUBS.forEach(h=>{
 const SECTOR=Math.PI*2/Math.max(1,Object.keys(HUB_ANGLE).length);
 GROUPS.forEach(g=>{
   const sib=GROUPS.filter(x=>x.cat===g.cat),k=sib.indexOf(g),m=sib.length;
-  if(HUB_POS&&HUB_POS[g.cat]){
-    /* anchored hub: fan the clusters in a full ring around it — the region
-       is its own little galaxy, not a slice of the shared circle */
-    const a=-Math.PI/2+k/Math.max(1,m)*Math.PI*2;
-    const r=170+(k%3)*55;
-    g.x=HUB_POS[g.cat][0]+Math.cos(a)*r;
-    g.y=HUB_POS[g.cat][1]+Math.sin(a)*r;
-    return;
-  }
   const step=Math.min(.5,SECTOR*.85/Math.max(1,m));
   const a=HUB_ANGLE[g.cat]+(k-(m-1)/2)*step;
   const r=HUB_R+170+(k%3)*70;
@@ -268,7 +243,7 @@ function simTick(){
   for(const e of es){
     const a=byId.get(e.s),b=byId.get(e.t),sp=SPR[e.kind];
     let dx=b.x-a.x,dy=b.y-a.y;
-    const d=Math.max(1,Math.hypot(dx,dy)),f=(d-(e.d||sp.d))*sp.k*simAlpha;
+    const d=Math.max(1,Math.hypot(dx,dy)),f=(d-sp.d)*sp.k*simAlpha;
     const fx=dx/d*f,fy=dy/d*f;
     if(a.fx==null){a.vx+=fx;a.vy+=fy;}
     if(b.fx==null){b.vx-=fx;b.vy-=fy;}

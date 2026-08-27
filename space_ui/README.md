@@ -26,7 +26,10 @@ directly. Descended from the single-file xo-atlas `v3.html`.
 | `js/core/ui.js` | Shared UI helpers (toast). |
 | `js/core/server-widget.js` | Footer server pill (status poll + stop). |
 | `js/core/preview.js` | File previewer drawer. Any view opens it with a `space:preview-file` event; markdown renders through `markdown.js`, HTML renders in an empty-`sandbox` iframe, everything else as escaped source. |
-| `js/views/atlas.js` | Dashboard + Graph + Timeline — three lenses over one dataset, one shared closure, three exported views. |
+| `js/views/dashboard.js` | The Dashboard shell: eight data regions (q1–q8) as a bento grid of luminous canvas cards, one generative visualization per card — vault embers, session rings, tool-call pulsar, commit heat lanes, watcher core, workspace filaments, the project cluster, and .xo glass treemaps. Clicking a card expands it to a full-stage detail view with hover tooltips; deep-link with `#/dashboard?focus=q4`. Reads `/xo/dashboard.json` (schema 2, region-keyed data — not the space.json node/edge shape). |
+| `js/views/dashboard/lib.js` | The card renderers' shared vocabulary: ink/font tokens, the validated accent math (`tint`/`shade`/`hexA`), cached radial glow sprites, additive-blend helpers (`ember`, `glint`, `softLine`, `softRing`), deterministic `fnv` jitter, recency→brightness `freshness`, and offscreen `layer()` bases so animation stays cheap. |
+| `js/views/dashboard/cards/*.js` | One module per card, all speaking the contract documented in `dashboard.js`'s header: `init(data, env)` lays out once (deterministic), `draw(gc, state, env, t, mouse)` paints each frame over a baked static base, `hits()` feeds expanded-mode tooltips. |
+| `js/views/atlas.js` | Graph + Timeline — two lenses over the workspace dataset (space.json), one shared closure, two exported views. |
 | `js/views/sessions.js` | The Sessions (Argus telemetry) view. |
 | `js/views/projects.js` | The Files List lens: project list with per-project drawers (folder browser via `/tree`, todos, open sessions, recent events). Owns the `Files` tab; Graph and Tree are sibling lenses (`nav:false`, `parent:'projects'`). |
 | `js/views/tree.js` | The Files Tree lens: horizontal hierarchy over the same `space.json` dataset as Graph — folders as columns, files stacked beside their parent. Deep-link `#/tree`. |
@@ -107,8 +110,14 @@ the registry keeps the tabs switchable regardless.
 
 `gitHistory` feeds the Timeline's **By project** mode: one lane per project,
 one dot per commit day (`n` commits, up to 3 sampled subjects in `s`). The
-mode toggle only renders when at least one project carries history; the
-Dashboard projection and non-git projects have none.
+mode toggle only renders when at least one project carries history; non-git
+projects have none.
+
+The Dashboard does **not** use this schema: `/xo/dashboard.json` is schema 2 —
+`{"schema": 2, "meta", "regions": [{ "id": "q1".."q8", "kind", "label",
+"color", "blurb", "stat", "count", "data" }]}` — where each region's `data`
+is shaped for its own renderer (see `visualizer/dashboard_regions.py` and
+`js/views/dashboard.js`).
 
 Shapes are semantic: `disc` = code, `ring` = document, `diamond` = everything
 else. Leaf `date` is the git first-added date, or `null` when git does not
