@@ -7,13 +7,29 @@ projects. This guide is the short path from "I found something" to "it's
 merged". The engineering detail lives in [DEVELOPING.md](DEVELOPING.md); this
 file tells you how to work with us.
 
-**Contents:** [What we're looking for](#what-were-looking-for) ·
-[Before you start](#before-you-start) · [Reporting a bug](#reporting-a-bug) ·
-[Security](#security) · [Set up a dev environment](#set-up-a-dev-environment) ·
-[Ground rules](#ground-rules) · [Where things live](#where-things-live) ·
-[Testing and validation](#testing-and-validation) · [Docs move with code](#docs-move-with-code) ·
-[Branches, commits, pull requests](#branches-commits-pull-requests) ·
-[Review](#review) · [Windows](#windows) · [Community and licence](#community-and-licence)
+## Contents
+
+**Getting involved**
+
+1. [What we're looking for](#what-were-looking-for) — what helps most, and what we'll push back on
+2. [Before you start](#before-you-start) — search first; when to open an issue before a PR
+3. [Reporting a bug](#reporting-a-bug) — what to include so it can be reproduced
+4. [Security](#security) — how to report a vulnerability without publishing it
+
+**Working on the code**
+
+5. [Set up a dev environment](#set-up-a-dev-environment) — clone, two ways to run, WSL on Windows
+6. [Ground rules](#ground-rules) — the seven invariants every change must keep
+7. [Where things live](#where-things-live) — the map, adding a runtime, changing the Space UI
+8. [Testing and validation](#testing-and-validation) — the commands to run before a PR
+9. [Docs move with code](#docs-move-with-code) — which docs change with which code
+
+**Getting it merged**
+
+10. [Branches, commits, pull requests](#branches-commits-pull-requests) — `development` vs `main`, what a PR must say
+11. [Review](#review) — what we look at, in what order, and how fast
+12. [Windows](#windows) — what works natively and what needs WSL
+13. [Community and licence](#community-and-licence) — where to ask, MIT
 
 ---
 
@@ -86,9 +102,10 @@ If you are not sure it is a bug, open the issue anyway and say so.
 
 ## Security
 
-Do **not** open a public issue for a vulnerability — credentials, path escapes,
-anything that would let one user reach another's data. Use GitHub's private
-reporting: [Security → Report a vulnerability](https://github.com/quirq-ai/xo-space/security/advisories/new).
+Do **not** describe a vulnerability in a public issue — credentials, path
+escapes, anything that would let one user reach another's data. Instead, open
+an issue titled **"Security: request for a private channel"** with no details
+in it, and a maintainer will reply with a way to send the report privately.
 Give us a reasonable window to fix it before disclosing. Credit goes to the
 reporter in the fix's notes unless you prefer otherwise.
 

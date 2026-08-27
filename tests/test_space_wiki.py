@@ -617,7 +617,10 @@ class SpaceWikiTests(unittest.TestCase):
         for doc in (guide, readme, developing):
             self.assertNotRegex(doc, r"\b\d{2,3} tests\b")
         self.assertNotIn("expect 146", developing)
-        self.assertIn("security/advisories/new", guide)
+        # Security reports must never be steered into a public issue body, and
+        # the guide must not link GitHub private reporting until it is enabled.
+        self.assertIn("request for a private channel", guide)
+        self.assertNotIn("security/advisories/new", guide)
         # Windows contributors are told, up front, to use WSL.
         self.assertIn("On Windows, use WSL", guide)
 
