@@ -30,14 +30,23 @@
    removed lines red; diffs load lazily and are cached per commit for as long
    as the file stays open.
 
-   For markdown and HTML the expanded commit defaults to a RENDERED diff —
-   the change as the document shows it, not as its source spells it. Markdown
-   renders each hunk's removed and added lines through the same mdToHtml the
-   live preview uses, framed red and green; HTML shows the whole document
-   before and after the commit in the same empty-sandbox iframes as the live
-   preview, because a fragment of HTML torn from its document renders as
-   nothing meaningful. A Preview/Source switch on each expanded commit drops
-   to the raw patch lines; plain text files only ever get the patch. */
+   For markdown the expanded commit defaults to a REDLINE — one merged
+   rendered document in the tracked-changes idiom: deleted content struck
+   through in red, added content green, in place, with the unchanged document
+   flowing around them. It is built by replaying the commit's hunks over the
+   file's after-snapshot, marking changes with private-use sentinel
+   characters that ride through mdToHtml untouched (it escapes only
+   &<>"), then swapping the sentinels for real <del>/<ins> tags in the
+   rendered output — so the change marks never bypass the escape-first
+   renderer. Replaced runs are diffed word by word, which naturally leaves
+   shared structure markers (#, -, >) unmarked and the block parsing intact.
+
+   HTML cannot be redlined as a document — striking text through a merged
+   arbitrary webpage means editing untrusted markup — so an HTML commit
+   renders the whole document before and after in the same empty-sandbox
+   iframes as the live preview. A Preview/Source switch on each expanded
+   commit drops to the raw patch lines; plain text files only ever get the
+   patch. */
 import {API_BASE,apiFetch} from './api.js';
 import {mdToHtml} from './markdown.js';
 
@@ -210,32 +219,116 @@ function diffHTML(d){
     +(d.truncated?'<div class="pv-note">Diff truncated — showing the first 192 KB.</div>':'');
 }
 
-/* The patch, regrouped for rendering: each @@ hunk's removed and added
-   lines, with the file-header noise before the first @@ dropped. */
+/* ── the markdown redline ─────────────────────────────────────────────────
+   Change marks travel through mdToHtml as private-use sentinels — characters
+   no real document contains and escMd leaves alone — and become <del>/<ins>
+   only in the already-escaped output. */
+const DO='\uE000',DC='\uE001',IO='\uE002',IC='\uE003';
+
+/* The patch as hunks that can be replayed over the after-snapshot:
+   where each lands in the new file, and its body lines. */
 function parseHunks(diff){
   const hunks=[];let h=null;
   for(const l of diff.split('\n')){
-    if(l.startsWith('@@')){h={del:[],add:[]};hunks.push(h);continue;}
-    if(!h)continue;
-    if(l.startsWith('+'))h.add.push(l.slice(1));
-    else if(l.startsWith('-'))h.del.push(l.slice(1));
+    const m=/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(l);
+    if(m){h={newStart:+m[1],lines:[]};hunks.push(h);continue;}
+    if(h&&!l.startsWith('\\'))h.lines.push(l);
   }
-  return hunks.filter(h=>h.del.length||h.add.length);
+  return hunks;
 }
 
-/* Markdown, diffed as the document reads: every hunk's removed lines
-   rendered red, its added lines rendered green — mdToHtml escapes before it
-   transforms, exactly as in the live preview. */
+/* Mark one whole line, keeping its block syntax parseable: the sentinel
+   opens after the leading structure (heading/list/quote markers), and lines
+   that ARE structure — fences, rules, table separators — pass unmarked so
+   the merged document still parses as a document. */
+const STRUCT_LINE=/^\s*(?:```|~~~|(?:[-*_]\s*){3,}$|\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)+\|?\s*$)/;
+function markLine(l,O,C){
+  if(!l.trim()||STRUCT_LINE.test(l))return l;
+  const m=/^(\s*(?:>+\s?)*(?:#{1,6}\s+|[-*]\s+\[[ xX]\]\s+|[-*+]\s+|\d+[.)]\s+)?)(.*)$/.exec(l);
+  return m&&m[2]?m[1]+O+m[2]+C:l;
+}
+
+/* Wrap a run of tokens that may span lines: the marks close before every
+   newline and reopen after it, because a markdown block ends with its line. */
+const wrapRun=(txt,O,C)=>txt.split('\n')
+  .map(seg=>seg.trim()?O+seg+C:seg).join('\n');
+
+/* Word-level merge of one replaced run — the Google-Docs granularity: only
+   the words that changed get struck or greened, and shared tokens (which is
+   what leading # or - markers usually are) keep the line parsing as its
+   block. Classic LCS; null when the run is too big to afford it. */
+function wordMerge(delLines,insLines){
+  const tok=s=>s.match(/\n|[^\S\n]+|\S+/g)||[];
+  const a=tok(delLines.join('\n')),b=tok(insLines.join('\n'));
+  if(a.length*b.length>250000)return null;
+  const W=b.length+1,dp=new Uint16Array((a.length+1)*W);
+  for(let i=a.length-1;i>=0;i--)for(let j=b.length-1;j>=0;j--)
+    dp[i*W+j]=a[i]===b[j]?dp[(i+1)*W+j+1]+1:Math.max(dp[(i+1)*W+j],dp[i*W+j+1]);
+  let i=0,j=0,out='',dels='',inss='';
+  const flush=()=>{
+    if(dels)out+=wrapRun(dels,DO,DC);
+    if(inss)out+=wrapRun(inss,IO,IC);
+    dels=inss='';
+  };
+  while(i<a.length||j<b.length){
+    if(i<a.length&&j<b.length&&a[i]===b[j]){flush();out+=a[i];i++;j++;}
+    else if(j<b.length&&(i>=a.length||dp[i*W+j+1]>=dp[(i+1)*W+j]))inss+=b[j++];
+    else dels+=a[i++];
+  }
+  flush();
+  return out.split('\n');
+}
+
+/* One merged markdown document: the after-snapshot with the commit's hunks
+   replayed over it — deletions put back marked DO/DC, additions marked
+   IO/IC, everything else the document as it stands after the commit. */
+function mergedMarkdown(d){
+  if(d.before==null&&d.after!=null)
+    return d.after.split('\n').map(l=>markLine(l,IO,IC)).join('\n');
+  if(d.after==null&&d.before!=null)
+    return d.before.split('\n').map(l=>markLine(l,DO,DC)).join('\n');
+  if(d.after==null)return null;
+  const after=d.after.split('\n'),out=[];
+  let ptr=0,group={del:[],ins:[]};
+  const flush=()=>{
+    if(!group.del.length&&!group.ins.length)return;
+    const merged=group.del.length&&group.ins.length
+      ?wordMerge(group.del,group.ins):null;
+    if(merged)out.push(...merged);
+    else{
+      for(const l of group.del)out.push(markLine(l,DO,DC));
+      for(const l of group.ins)out.push(markLine(l,IO,IC));
+    }
+    group={del:[],ins:[]};
+  };
+  for(const h of parseHunks(d.diff)){
+    const start=h.newStart-1;
+    if(start<ptr)return null; /* overlapping hunks: not our patch */
+    while(ptr<start&&ptr<after.length)out.push(after[ptr++]);
+    for(const l of h.lines){
+      if(l.startsWith('+')){group.ins.push(l.slice(1));ptr++;}
+      else if(l.startsWith('-'))group.del.push(l.slice(1));
+      else{flush();out.push(after[ptr]??l.slice(1));ptr++;}
+    }
+    flush();
+  }
+  while(ptr<after.length)out.push(after[ptr++]);
+  return out.join('\n');
+}
+
 function mdDiffHTML(d){
-  const hunks=parseHunks(d.diff);
-  if(!hunks.length)return'<div class="pv-note">No rendered changes to show.</div>';
-  return hunks.map(h=>'<div class="pv-rd-hunk">'
-    +(h.del.length?'<div class="pv-rd pv-rd-del"><i>removed</i>'
-      +'<div class="pv-md">'+mdToHtml(h.del.join('\n'))+'</div></div>':'')
-    +(h.add.length?'<div class="pv-rd pv-rd-add"><i>added</i>'
-      +'<div class="pv-md">'+mdToHtml(h.add.join('\n'))+'</div></div>':'')
-    +'</div>').join('')
-    +(d.truncated?'<div class="pv-note">Diff truncated — showing the first 192 KB.</div>':'');
+  /* A truncated patch cannot be replayed honestly — line numbers past the
+     cut would misplace every mark — so it falls back to the source view. */
+  if(d.truncated)return'<div class="pv-note">This commit is too large to '
+    +'redline — showing the patch instead.</div>'+diffHTML(d);
+  const merged=mergedMarkdown(d);
+  if(merged==null)return diffHTML(d);
+  const html=mdToHtml(merged)
+    .replaceAll(DO,'<del class="pv-gd-del">').replaceAll(DC,'</del>')
+    .replaceAll(IO,'<ins class="pv-gd-ins">').replaceAll(IC,'</ins>');
+  return'<div class="pv-gd-key"><del class="pv-gd-del">struck</del> was removed'
+    +' · <ins class="pv-gd-ins">green</ins> was added</div>'
+    +'<div class="pv-md pv-gd">'+html+'</div>';
 }
 
 /* HTML, diffed as two whole documents: the file before and after the
@@ -288,13 +381,13 @@ async function toggleDiff(row){
   const hash=row.dataset.hash,mine=token,mydiffs=diffs;
   let d=mydiffs.get(hash);
   if(!d){
-    /* Only the HTML preview needs whole documents (its diff renders as
-       before/after); markdown rebuilds its rendered hunks from the patch. */
+    /* Rendered previews need whole documents: HTML for its before/after
+       panes, markdown for the after-snapshot the redline replays over. */
     const res=await apiFetch(API_BASE+'/api/xo-projects/'+encodeURIComponent(current.project)
       +'/file-diff?relative_path='+encodeURIComponent(current.path)
       +'&commit='+encodeURIComponent(hash)
       +(row.dataset.path?'&commit_path='+encodeURIComponent(row.dataset.path):'')
-      +(data?.kind==='html'?'&snapshots=1':''));
+      +(data?.kind==='html'||data?.kind==='markdown'?'&snapshots=1':''));
     if(mine!==token)return; /* the file changed or closed while loading */
     d=res.ok?res.data:{error:res.offline?'xo-space is unreachable'
       :res.error||'Could not read this commit.'};

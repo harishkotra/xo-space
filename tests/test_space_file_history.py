@@ -336,14 +336,24 @@ class PreviewWindowUITests(unittest.TestCase):
         self.assertIn(".pv-d-del", css)
         self.assertIn(".pv-commit", css)
 
-    def test_md_and_html_commits_render_the_diff_as_a_preview(self) -> None:
+    def test_markdown_commits_redline_like_tracked_changes(self) -> None:
         js = (ROOT / "space_ui" / "js" / "core" / "preview.js").read_text(encoding="utf-8")
         css = (ROOT / "space_ui" / "css" / "preview.css").read_text(encoding="utf-8")
-        # Markdown hunks render through the same escaping renderer as the
-        # live preview; HTML renders whole before/after documents in the
-        # same empty-sandbox iframes. Both can drop to the raw patch.
-        self.assertIn("mdToHtml(h.del.join(", js)
-        self.assertIn("mdToHtml(h.add.join(", js)
+        # One merged rendered document: change marks travel through the
+        # escape-first renderer as private-use sentinels and only become
+        # <del>/<ins> in already-escaped output. Word-level granularity.
+        self.assertIn("\\uE000", js)
+        self.assertIn("mdToHtml(merged)", js)
+        self.assertIn("pv-gd-del", js)
+        self.assertIn("pv-gd-ins", js)
+        self.assertIn("wordMerge", js)
+        self.assertIn(".pv-gd-del", css)
+        self.assertIn(".pv-gd-ins", css)
+        self.assertIn("line-through", css)
+
+    def test_html_commits_render_before_and_after_documents(self) -> None:
+        js = (ROOT / "space_ui" / "js" / "core" / "preview.js").read_text(encoding="utf-8")
+        css = (ROOT / "space_ui" / "css" / "preview.css").read_text(encoding="utf-8")
         self.assertIn("snapshots=1", js)
         self.assertIn('sandbox=""', js)
         self.assertIn('data-dmode="source"', js)
@@ -355,7 +365,8 @@ class PreviewWindowUITests(unittest.TestCase):
         index = (ROOT / "space_ui" / "index.html").read_text(encoding="utf-8")
         app = (ROOT / "space_ui" / "js" / "app.js").read_text(encoding="utf-8")
         for stale in ("20260816-preview1", "20260825-rename1",
-                      "20260827-float1", "20260827-explore1"):
+                      "20260827-float1", "20260827-explore1",
+                      "20260827-richdiff1"):
             self.assertNotIn(f"css/preview.css?v={stale}", index)
             self.assertNotIn(f"core/preview.js?v={stale}", app)
 

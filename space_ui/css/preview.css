@@ -114,10 +114,24 @@
   .pv-d-modes button.is-on{color:var(--ink);border-color:var(--line);
     background:var(--bg-3)}
 
-  /* rendered diff — the change as the document shows it, not as its
-     source spells it: removed content framed red, added framed green */
-  .pv-rd-hunk{padding:9px 10px 3px}
-  .pv-rd-hunk+.pv-rd-hunk{border-top:1px dashed var(--line-soft)}
+  /* markdown redline — one merged rendered document, tracked-changes
+     style: deleted content struck through red, added content green */
+  .pv-gd-key{padding:8px 14px 0;font:400 10px var(--mono);color:var(--ink-3)}
+  .pv-gd{padding:10px 16px 14px}
+  .pv-gd-del,.pv-gd .pv-gd-del *{color:var(--err)!important}
+  .pv-gd-del{
+    text-decoration:line-through;text-decoration-color:var(--err);
+    text-decoration-thickness:1.5px;background:rgba(200,103,76,.09);
+    border-radius:3px;padding:0 2px;
+  }
+  .pv-gd-ins,.pv-gd .pv-gd-ins *{color:var(--accent)!important}
+  .pv-gd-ins{
+    text-decoration:underline;text-decoration-color:rgba(168,217,79,.55);
+    text-underline-offset:2px;background:rgba(168,217,79,.07);
+    border-radius:3px;padding:0 2px;
+  }
+
+  /* HTML before/after — the change as two whole rendered documents */
   .pv-rd{border-left:3px solid;border-radius:4px;padding:6px 11px 7px;
     margin:0 0 8px}
   .pv-rd>i{display:block;font:400 8.5px var(--mono);font-style:normal;
