@@ -570,13 +570,19 @@ start_server() {
     printf '    Logs:  %s\n' "$log_file"
     printf '    Press Ctrl-C to stop.\n\n'
     print_restart_hint
+
+    # exec replaces this shell so Ctrl-C reaches Uvicorn directly and no
+    # wrapper lingers. If the server dies at boot, the prompt returns
+    # silently — the log above has the reason.
+    exec "$VENV_PYTHON" server.py >> "$log_file" 2>&1
 }
 
 # ==============================================================
 # How to come back. Once Ctrl-C returns the prompt there is nothing on
 # screen that says how to start again, and "run the installer command"
-# is only obvious to whoever ran it first. Printed before exec hands the
-# terminal to the server, since nothing of this script survives that.
+# is only obvious to whoever ran it first. Print-only: start_server owns
+# the exec, and this must run before it, since nothing of this script
+# survives the exec.
 # ==============================================================
 print_restart_hint() {
     local ref_prefix=""
@@ -590,11 +596,6 @@ print_restart_hint() {
         printf '    Start again later:  cd %s && ./install.sh\n' "$REPO_DIR"
         printf '    Update:             Setup tab → Update, or git pull --ff-only, then start again\n\n'
     fi
-
-    # exec replaces this shell so Ctrl-C reaches Uvicorn directly and no
-    # wrapper lingers. If the server dies at boot, the prompt returns
-    # silently — the log above has the reason.
-    exec "$VENV_PYTHON" server.py >> "$log_file" 2>&1
 }
 
 main() {
