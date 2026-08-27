@@ -13,11 +13,15 @@
    Rendering rules, in order of how much they matter:
      - markdown goes through core/markdown.js, which escapes before it
        transforms and emits only fixed attribute-free tags;
-     - HTML from disk is NEVER injected into this document. It renders in an
-       iframe with an empty sandbox: no scripts, no same-origin, no forms, no
-       top-level navigation. A file in the workspace is not trusted content —
-       an agent wrote it — and the app it would otherwise be running inside
-       holds the user's session;
+     - HTML from disk is NEVER injected into this document. It renders in a
+       sandboxed iframe whose scripts may run but never reach this app: no
+       allow-same-origin means an opaque origin — no cookies, no storage, no
+       parent access, and the API's CORS allowlist refuses it. Scripts are
+       allowed because real documents (reports that reveal sections on
+       scroll, app index pages) are blank without them; a file in the
+       workspace is still not trusted content — an agent wrote it — which is
+       why the origin line, not the script line, is what protects the
+       user's session;
      - anything else renders as escaped source text.
    The Source toggle shows raw text for every kind, which is also the escape
    hatch when a render looks wrong.
@@ -130,7 +134,7 @@ function close(){
   el.classList.remove('is-open');
   current=null;data=null;headData=null;versions=null;cache=null;token++;
   picker.hidden=true;picker.innerHTML='';
-  if(body)body.innerHTML='';
+  if(body){body.classList.remove('is-frame');body.innerHTML='';}
 }
 
 /* The version list arrives after the document: the picker only appears once
@@ -195,6 +199,7 @@ function render(placeholder){
   if(placeholder||!data){
     meta.textContent='';
     toggle.hidden=true;
+    body.classList.remove('is-frame');
     body.innerHTML=placeholder||'';
     return;
   }
@@ -203,18 +208,31 @@ function render(placeholder){
     data.truncated?'truncated':''].filter(Boolean).join(' · ');
   toggle.hidden=false;
   toggle.textContent=source?'Rendered':'Source';
+  /* An HTML document gets the whole pane, edge to edge, and its own
+     scrollbar — one scroll surface, the document's, not two nested ones. */
+  const framed=!source&&data.kind==='html';
+  body.classList.toggle('is-frame',framed);
   body.innerHTML=source?sourceHTML(data)
     :data.kind==='markdown'?'<div class="pv-md">'+mdToHtml(data.content)+'</div>'
     :data.kind==='html'?frameHTML(data)
     :sourceHTML(data);
-  if(data.truncated)body.insertAdjacentHTML('beforeend',
+  /* In frame mode the pane does not scroll, so the note would be invisible
+     behind the iframe; the meta line's 'truncated' flag carries it there. */
+  if(data.truncated&&!framed)body.insertAdjacentHTML('beforeend',
     '<div class="pv-note">Showing the first 256 KB of this file.</div>');
 }
 const sourceHTML=d=>'<pre class="pv-src">'+esc(d.content)+'</pre>';
-/* sandbox="" is the whole point: an empty allow-list means no scripts and a
-   unique opaque origin, so the document cannot reach this page, its storage,
-   or the API it is served from. srcdoc keeps it out of the network entirely. */
-const frameHTML=d=>'<iframe class="pv-frame" sandbox="" referrerpolicy="no-referrer" '
+/* The sandbox line that matters is the one NOT granted: no
+   allow-same-origin, so the document runs in an opaque origin — no cookies,
+   no storage, no parent window, and the API's CORS allowlist turns it away.
+   allow-scripts is granted because scroll-reveal reports and app index
+   pages are blank without it, and scripts cut off from every origin can
+   only compute; the popup pair lets the document's ordinary target=_blank
+   links open (a click is still required by popup blocking). No forms, no
+   top-level navigation. */
+const frameHTML=d=>'<iframe class="pv-frame" '
+  +'sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" '
+  +'referrerpolicy="no-referrer" '
   +'title="'+esc(d.name)+' preview" srcdoc="'+esc(d.content)+'"></iframe>';
 
 function onClick(e){
