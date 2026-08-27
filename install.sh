@@ -585,13 +585,15 @@ start_server() {
 # survives the exec.
 # ==============================================================
 print_restart_hint() {
+    # The ref goes on `sh`, not on `curl`: it is the bootstrap that reads it,
+    # and with a pipe an assignment binds to the command it precedes.
     local ref_prefix=""
     [ "$SOURCE_REF" = "main" ] || ref_prefix="QUIRQ_SOURCE_REF=${SOURCE_REF} "
 
     if [ "$MANAGED_CHECKOUT" -eq 1 ]; then
         printf '    Start again later:  cd %s && %s/install.sh\n' "$LAUNCH_DIR" "$REPO_DIR"
-        printf '    Update and start:   cd %s && %scurl -fsSL %s | sh\n\n' \
-            "$LAUNCH_DIR" "$ref_prefix" "$INSTALL_URL"
+        printf '    Update and start:   cd %s && curl -fsSL %s | %ssh\n\n' \
+            "$LAUNCH_DIR" "$INSTALL_URL" "$ref_prefix"
     else
         printf '    Start again later:  cd %s && ./install.sh\n' "$REPO_DIR"
         printf '    Update:             Setup tab → Update, or git pull --ff-only, then start again\n\n'

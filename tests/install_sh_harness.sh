@@ -97,7 +97,9 @@ m="$(hint 1 "$W/ws/xo-space" "$W/ws")"
 case "$m" in *"cd $W/ws && $W/ws/xo-space/install.sh"*"curl -fsSL https://quirq.ai/install | sh"*) ok "managed banner: start-again + one-liner";; *) bad "managed banner" "$m";; esac
 case "$m" in *QUIRQ_SOURCE_REF*) bad "managed banner on main: no ref prefix" "$m";; *) ok "managed banner on main: no ref prefix";; esac
 m="$(hint 1 "$W/ws/xo-space" "$W/ws" development)"
-case "$m" in *"QUIRQ_SOURCE_REF=development curl"*) ok "managed banner on dev ref: prefix present";; *) bad "managed banner on dev ref" "$m";; esac
+# the ref must sit on `sh` (the bootstrap reads it), never on `curl`
+case "$m" in *"| QUIRQ_SOURCE_REF=development sh"*) ok "managed banner on dev ref: prefix on sh";; *) bad "managed banner on dev ref: prefix on sh" "$m";; esac
+case "$m" in *"QUIRQ_SOURCE_REF=development curl"*) bad "managed banner on dev ref: prefix must not be on curl" "$m";; *) ok "managed banner on dev ref: prefix not on curl";; esac
 i="$(hint 0 "$W/ws/xo-space" "$W/ws/xo-space")"
 case "$i" in *"cd $W/ws/xo-space && ./install.sh"*"git pull --ff-only"*) ok "in-place banner";; *) bad "in-place banner" "$i";; esac
 
