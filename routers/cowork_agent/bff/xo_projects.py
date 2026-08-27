@@ -25,7 +25,7 @@ from routers.cowork_agent.bff.filters import (
     is_root_only_hidden,
 )
 from services.cowork_agent import scopes
-from services.cowork_agent.file_history import file_git_history
+from services.cowork_agent.file_history import file_commit_diff, file_git_history
 from services.cowork_agent.project_layout import (
     list_project_tree,
     list_projects,
@@ -400,7 +400,9 @@ class FileHistoryCommit(BaseModel):
     """One commit touching the file.
 
     ``additions``/``deletions`` are ``None`` when git has no counts to
-    give: a binary file, or a commit that only renamed it.
+    give: a binary file, or a commit that only renamed it. ``path`` is
+    the file's name at that commit — echo it back as ``commit_path``
+    when asking /file-diff about the commit, so renames diff correctly.
     """
 
     hash: str
@@ -410,6 +412,7 @@ class FileHistoryCommit(BaseModel):
     subject: str
     additions: Optional[int] = None
     deletions: Optional[int] = None
+    path: Optional[str] = None
 
 
 class FileHistoryResponse(BaseModel):
@@ -464,4 +467,74 @@ def project_file_history(
         is_repo=raw["is_repo"],
         items=[FileHistoryCommit(**item) for item in raw["items"]],
         total=len(raw["items"]),
+    )
+
+
+# ── /api/xo-projects/{id}/file-diff ───────────────────────────────────────────
+#
+# One history commit, opened: the file's patch in that commit, for the
+# previewer's red/green line view. ``commit`` and ``commit_path`` come from a
+# /file-history item; ``relative_path`` stays the file as it exists today.
+
+
+class FileDiffResponse(BaseModel):
+    """``diff`` is ``None`` when the commit cannot be shown at all and
+    ``""`` when it holds no textual patch for this file."""
+
+    project_id: str
+    relative_path: str
+    commit: str
+    is_repo: bool
+    diff: Optional[str] = None
+    truncated: bool
+
+
+@router.get(
+    "/api/xo-projects/{project_id}/file-diff",
+    response_model=FileDiffResponse,
+)
+def project_file_diff(
+    project_id: str,
+    relative_path: str,
+    commit: str,
+    commit_path: Optional[str] = None,
+) -> FileDiffResponse:
+    """Return one commit's patch for one project file."""
+    if not project_dir_exists(project_id):
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "project_not_found", "message": "Project not found."},
+        )
+
+    try:
+        raw = file_commit_diff(
+            project_id, relative_path, commit, commit_path=commit_path
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "invalid_diff_request",
+                "message": "commit or path is malformed.",
+            },
+        ) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "scope_unavailable", "message": "File is not readable."},
+        ) from exc
+
+    if raw is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "file_not_found", "message": "File not found in project."},
+        )
+
+    return FileDiffResponse(
+        project_id=raw["project_id"],
+        relative_path=raw["relative_path"],
+        commit=raw["commit"],
+        is_repo=raw["is_repo"],
+        diff=raw["diff"],
+        truncated=raw["truncated"],
     )

@@ -25,7 +25,10 @@
    The History button swaps the document for the file's git log (the
    /file-history endpoint): who edited it, when, and how much. It is a second
    mode of the same window, not a navigation — closing history returns to the
-   document exactly as it was. */
+   document exactly as it was. Each commit row expands in place into that
+   commit's patch for this file (the /file-diff endpoint), added lines green,
+   removed lines red; diffs load lazily and are cached per commit for as long
+   as the file stays open. */
 import {API_BASE,apiFetch} from './api.js';
 import {mdToHtml} from './markdown.js';
 
@@ -48,6 +51,7 @@ let data=null;      /* the loaded payload */
 let source=false;   /* Source toggle */
 let mode='file';    /* 'file' | 'history' */
 let hist=null;      /* the loaded /file-history payload, or null */
+let diffs=null;     /* Map hash → /file-diff payload (or {error}), per file */
 let token=0;        /* race guard: only the newest request may paint */
 
 export function initPreview(){
@@ -101,7 +105,7 @@ function initDrag(){
 async function open({project,path,name}){
   if(!el||!project||!path)return;
   current={project,path,name:name||path.split('/').pop()};
-  data=null;hist=null;source=false;mode='file';
+  data=null;hist=null;diffs=new Map();source=false;mode='file';
   const mine=++token;
   el.classList.add('is-open');
   render('<div class="pv-note">loading…</div>');
@@ -120,7 +124,7 @@ async function open({project,path,name}){
 }
 function close(){
   el.classList.remove('is-open');
-  current=null;data=null;hist=null;mode='file';token++;
+  current=null;data=null;hist=null;diffs=null;mode='file';token++;
   if(body)body.innerHTML='';
 }
 
@@ -173,10 +177,60 @@ function historyHTML(){
   return'<ol class="pv-hist">'+hist.items.map(c=>{
     const stat=(c.additions!=null||c.deletions!=null)
       ?' · <b class="pv-add">+'+(c.additions??0)+'</b> <b class="pv-del">−'+(c.deletions??0)+'</b>':'';
-    return'<li><div class="pv-hist-head"><code>'+esc(c.short_hash)+'</code>'
+    /* data-path is the file's name AT that commit (renames); /file-diff
+       needs it echoed back as commit_path to ask git about the right file. */
+    return'<li class="pv-commit" data-hash="'+esc(c.hash)+'"'
+      +(c.path?' data-path="'+esc(c.path)+'"':'')+'>'
+      +'<div class="pv-hist-head"><span class="pv-caret"></span>'
+      +'<code>'+esc(c.short_hash)+'</code>'
       +'<span>'+esc(c.subject)+'</span></div>'
       +'<div class="pv-hist-meta">'+esc(c.author)+' · '+(rel(c.date)||esc(c.date||''))+stat+'</div></li>';
   }).join('')+'</ol>';
+}
+
+/* One expanded commit: the unified diff classed line by line. The patch is
+   plain text from git; every line is escaped, the classes only color it. */
+function diffHTML(d){
+  if(d.error)return'<div class="pv-note">'+esc(d.error)+'</div>';
+  if(d.diff==null)return'<div class="pv-note">Could not show this commit.</div>';
+  if(!d.diff.trim())return'<div class="pv-note">No line changes for this file '
+    +'in this commit — a rename, merge or binary change.</div>';
+  const cls=l=>
+    /^(diff --git|index |--- |\+\+\+ |new file|deleted file|similarity|rename |old mode|new mode|Binary files)/.test(l)?'pv-d-meta'
+    :l.startsWith('@@')?'pv-d-hunk'
+    :l.startsWith('+')?'pv-d-add'
+    :l.startsWith('-')?'pv-d-del':'pv-d-ctx';
+  return d.diff.replace(/\n$/,'').split('\n').map(l=>
+    '<div class="pv-d-line '+cls(l)+'">'+esc(l||' ')+'</div>').join('')
+    +(d.truncated?'<div class="pv-note">Diff truncated — showing the first 192 KB.</div>':'');
+}
+
+async function toggleDiff(row){
+  if(!row.classList.toggle('is-open')){
+    const pane=row.querySelector('.pv-diff');
+    if(pane)pane.hidden=true;
+    return;
+  }
+  let pane=row.querySelector('.pv-diff');
+  if(pane){pane.hidden=false;return;}
+  pane=document.createElement('div');
+  pane.className='pv-diff';
+  pane.innerHTML='<div class="pv-note">loading diff…</div>';
+  row.appendChild(pane);
+  const hash=row.dataset.hash,mine=token,mydiffs=diffs;
+  let d=mydiffs.get(hash);
+  if(!d){
+    const res=await apiFetch(API_BASE+'/api/xo-projects/'+encodeURIComponent(current.project)
+      +'/file-diff?relative_path='+encodeURIComponent(current.path)
+      +'&commit='+encodeURIComponent(hash)
+      +(row.dataset.path?'&commit_path='+encodeURIComponent(row.dataset.path):''));
+    if(mine!==token)return; /* the file changed or closed while loading */
+    d=res.ok?res.data:{error:res.offline?'xo-space is unreachable'
+      :res.error||'Could not read this commit.'};
+    mydiffs.set(hash,d);
+  }
+  if(!row.isConnected)return; /* the list re-rendered under the fetch */
+  pane.innerHTML=diffHTML(d);
 }
 
 async function loadHistory(){
@@ -201,5 +255,10 @@ function onClick(e){
     mode=mode==='history'?'file':'history';
     if(mode==='history'&&!hist){loadHistory();return;}
     render();
+    return;
   }
+  /* A click inside an expanded diff is reading, not toggling. */
+  if(e.target.closest('.pv-diff'))return;
+  const row=e.target.closest('.pv-commit');
+  if(row&&mode==='history'&&current)toggleDiff(row);
 }

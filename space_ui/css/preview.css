@@ -64,18 +64,43 @@
     border-radius:9px;background:#fff;
   }
 
-  /* git history — one row per commit, newest first */
+  /* git history — one row per commit, newest first; a row opens into that
+     commit's diff for this file */
   .pv-hist{list-style:none;margin:0;padding:0}
   .pv-hist li{padding:11px 2px;border-bottom:1px solid var(--line-soft)}
   .pv-hist li:last-child{border-bottom:0}
+  .pv-commit{cursor:pointer}
+  .pv-commit:hover .pv-hist-head span{color:var(--accent)}
   .pv-hist-head{display:flex;align-items:baseline;gap:9px;min-width:0}
+  .pv-caret{flex:none;width:0;height:0;align-self:center;
+    border-left:5px solid var(--ink-4);border-top:4px solid transparent;
+    border-bottom:4px solid transparent;transition:transform .16s var(--ease)}
+  .pv-commit.is-open .pv-caret{transform:rotate(90deg);border-left-color:var(--ink-2)}
   .pv-hist-head code{flex:none;font:400 10.5px var(--mono);color:var(--accent);
     background:var(--bg-3);border:1px solid var(--line-soft);border-radius:5px;
     padding:1px 6px}
   .pv-hist-head span{font-size:12.5px;line-height:1.45;color:var(--ink)}
-  .pv-hist-meta{margin-top:4px;font:400 10.5px var(--mono);color:var(--ink-3)}
+  .pv-hist-meta{margin-top:4px;padding-left:14px;
+    font:400 10.5px var(--mono);color:var(--ink-3)}
   .pv-hist-meta .pv-add{font-weight:400;color:var(--accent)}
   .pv-hist-meta .pv-del{font-weight:400;color:var(--err)}
+
+  /* the expanded commit — added lines green, removed lines red */
+  .pv-diff{
+    margin:10px 0 3px 14px;padding:7px 0;cursor:auto;
+    border:1px solid var(--line-soft);border-radius:8px;background:rgba(9,11,14,.6);
+    overflow-x:auto;
+  }
+  .pv-d-line{
+    padding:1px 12px;font:400 11px/1.6 var(--mono);
+    white-space:pre-wrap;word-break:break-word;tab-size:2;
+  }
+  .pv-d-add{background:rgba(168,217,79,.10);color:#c4e18d}
+  .pv-d-del{background:rgba(200,103,76,.13);color:#e0a08c}
+  .pv-d-hunk{color:var(--ink-3);padding-top:7px;letter-spacing:.02em}
+  .pv-d-meta{color:var(--ink-4)}
+  .pv-d-ctx{color:var(--ink-2)}
+  .pv-diff .pv-note{padding:2px 12px}
 
   /* rendered markdown — same restrained typography as the wiki articles */
   .pv-md{font-size:13.5px;line-height:1.68;color:var(--ink-2)}

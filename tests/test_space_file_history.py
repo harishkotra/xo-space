@@ -34,7 +34,9 @@ def git(cwd: Path, *args: str) -> None:
 
 
 @unittest.skipIf(shutil.which("git") is None, "git is not installed")
-class FileGitHistoryTests(unittest.TestCase):
+class RepoFixture(unittest.TestCase):
+    """A throwaway XO_PROJECTS_ROOT to build real git repos in."""
+
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
@@ -55,6 +57,8 @@ class FileGitHistoryTests(unittest.TestCase):
             git(project, "init", "-q")
         return project
 
+
+class FileGitHistoryTests(RepoFixture):
     def test_commits_come_back_newest_first_with_counts(self) -> None:
         from services.cowork_agent.file_history import file_git_history
 
@@ -139,6 +143,23 @@ class FileGitHistoryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             file_git_history("demo", "../demo/notes.md")
 
+    def test_history_items_carry_the_path_at_each_commit(self) -> None:
+        from services.cowork_agent.file_history import file_git_history
+
+        project = self.make_project("demo", repo=True)
+        (project / "old.md").write_text("body\n", encoding="utf-8")
+        git(project, "add", "old.md")
+        git(project, "commit", "-q", "-m", "add old")
+        git(project, "mv", "old.md", "new.md")
+        (project / "new.md").write_text("body\nmore\n", encoding="utf-8")
+        git(project, "add", "new.md")
+        git(project, "commit", "-q", "-m", "rename and grow")
+
+        out = file_git_history("demo", "new.md")
+        by_subject = {c["subject"]: c for c in out["items"]}
+        self.assertEqual(by_subject["rename and grow"]["path"], "new.md")
+        self.assertEqual(by_subject["add old"]["path"], "old.md")
+
     def test_limit_caps_the_log(self) -> None:
         from services.cowork_agent.file_history import file_git_history
 
@@ -154,6 +175,87 @@ class FileGitHistoryTests(unittest.TestCase):
         self.assertEqual(out["items"][0]["subject"], "rev 3")
 
 
+class FileCommitDiffTests(RepoFixture):
+    def commit_file(self, project: Path, name: str, content: str, msg: str) -> str:
+        (project / name).write_text(content, encoding="utf-8")
+        git(project, "add", name)
+        git(project, "commit", "-q", "-m", msg)
+        proc = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=project, env=GIT_ENV,
+            check=True, capture_output=True, text=True,
+        )
+        return proc.stdout.strip()
+
+    def test_diff_shows_added_and_removed_lines(self) -> None:
+        from services.cowork_agent.file_history import file_commit_diff
+
+        project = self.make_project("demo", repo=True)
+        self.commit_file(project, "notes.md", "one\ntwo\n", "first")
+        second = self.commit_file(project, "notes.md", "one\nthree\n", "second")
+
+        out = file_commit_diff("demo", "notes.md", second)
+        self.assertTrue(out["is_repo"])
+        self.assertFalse(out["truncated"])
+        self.assertIn("+three", out["diff"])
+        self.assertIn("-two", out["diff"])
+
+    def test_commit_path_reaches_a_pre_rename_commit(self) -> None:
+        from services.cowork_agent.file_history import file_commit_diff
+
+        project = self.make_project("demo", repo=True)
+        first = self.commit_file(project, "old.md", "body\n", "add old")
+        git(project, "mv", "old.md", "new.md")
+        git(project, "commit", "-q", "-m", "rename")
+
+        out = file_commit_diff("demo", "new.md", first, commit_path="old.md")
+        self.assertIn("+body", out["diff"])
+
+    def test_unknown_commit_reports_no_diff_not_an_error(self) -> None:
+        from services.cowork_agent.file_history import file_commit_diff
+
+        project = self.make_project("demo", repo=True)
+        self.commit_file(project, "notes.md", "x\n", "only")
+
+        out = file_commit_diff("demo", "notes.md", "deadbeef")
+        self.assertTrue(out["is_repo"])
+        self.assertIsNone(out["diff"])
+
+    def test_non_repo_project_reports_is_repo_false(self) -> None:
+        from services.cowork_agent.file_history import file_commit_diff
+
+        project = self.make_project("plain", repo=False)
+        (project / "a.md").write_text("x\n", encoding="utf-8")
+
+        out = file_commit_diff("plain", "a.md", "abcd1234")
+        self.assertFalse(out["is_repo"])
+        self.assertIsNone(out["diff"])
+
+    def test_malformed_commit_and_commit_path_raise(self) -> None:
+        from services.cowork_agent.file_history import file_commit_diff
+
+        project = self.make_project("demo", repo=True)
+        head = self.commit_file(project, "notes.md", "x\n", "only")
+
+        for bad_commit in ("", "HEAD", "main", "abc$", "--all"):
+            with self.assertRaises(ValueError):
+                file_commit_diff("demo", "notes.md", bad_commit)
+        for bad_path in ("", "/etc/passwd", "../notes.md", "-oops", "a//b"):
+            with self.assertRaises(ValueError):
+                file_commit_diff("demo", "notes.md", head, commit_path=bad_path)
+
+    def test_oversized_diff_is_truncated_on_a_line(self) -> None:
+        from services.cowork_agent.file_history import file_commit_diff
+
+        project = self.make_project("demo", repo=True)
+        body = "".join(f"line {i}\n" for i in range(200))
+        head = self.commit_file(project, "big.md", body, "big")
+
+        out = file_commit_diff("demo", "big.md", head, max_chars=500)
+        self.assertTrue(out["truncated"])
+        self.assertLessEqual(len(out["diff"]), 501)
+        self.assertTrue(out["diff"].endswith("\n"))
+
+
 class FileHistoryRouteTests(unittest.TestCase):
     def test_route_is_registered_with_the_response_model(self) -> None:
         from routers.cowork_agent.bff.xo_projects import (
@@ -165,6 +267,17 @@ class FileHistoryRouteTests(unittest.TestCase):
         self.assertIn("/api/xo-projects/{project_id}/file-history", routes)
         route = routes["/api/xo-projects/{project_id}/file-history"]
         self.assertIs(route.response_model, FileHistoryResponse)
+
+    def test_diff_route_is_registered_with_the_response_model(self) -> None:
+        from routers.cowork_agent.bff.xo_projects import (
+            FileDiffResponse,
+            router,
+        )
+
+        routes = {r.path: r for r in router.routes}
+        self.assertIn("/api/xo-projects/{project_id}/file-diff", routes)
+        route = routes["/api/xo-projects/{project_id}/file-diff"]
+        self.assertIs(route.response_model, FileDiffResponse)
 
 
 class PreviewWindowUITests(unittest.TestCase):
@@ -187,11 +300,23 @@ class PreviewWindowUITests(unittest.TestCase):
         self.assertIn("/file-history?relative_path=", js)
         self.assertNotIn("space:focus-project", js)
 
+    def test_commits_expand_into_a_red_green_diff(self) -> None:
+        css = (ROOT / "space_ui" / "css" / "preview.css").read_text(encoding="utf-8")
+        js = (ROOT / "space_ui" / "js" / "core" / "preview.js").read_text(encoding="utf-8")
+        self.assertIn("/file-diff?relative_path=", js)
+        self.assertIn("commit_path=", js)  # renames diff under their old name
+        self.assertIn("pv-d-add", js)
+        self.assertIn("pv-d-del", js)
+        self.assertIn(".pv-d-add", css)
+        self.assertIn(".pv-d-del", css)
+        self.assertIn(".pv-commit", css)
+
     def test_cache_stamps_were_bumped_for_this_change(self) -> None:
         index = (ROOT / "space_ui" / "index.html").read_text(encoding="utf-8")
         app = (ROOT / "space_ui" / "js" / "app.js").read_text(encoding="utf-8")
-        self.assertNotIn("css/preview.css?v=20260816-preview1", index)
-        self.assertNotIn("core/preview.js?v=20260825-rename1", app)
+        for stale in ("20260816-preview1", "20260825-rename1", "20260827-float1"):
+            self.assertNotIn(f"css/preview.css?v={stale}", index)
+            self.assertNotIn(f"core/preview.js?v={stale}", app)
 
 
 if __name__ == "__main__":
