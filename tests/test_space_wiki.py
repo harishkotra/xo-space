@@ -590,6 +590,43 @@ class SpaceWikiTests(unittest.TestCase):
         css = (ROOT / "space_ui" / "css" / "wiki.css").read_text(encoding="utf-8")
         self.assertIn(".wiki-link{", css)
 
+    def test_contributing_guide_matches_how_the_repo_actually_works(self) -> None:
+        """CONTRIBUTING.md is the front door for outside contributors. The
+        facts most likely to rot are pinned: the branch model, the four
+        invariants, the validation commands, and the README pointing at it."""
+        guide = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+        # Work lands on development; main is the release branch.
+        self.assertIn("target `development`", guide)
+        self.assertIn("publish-container.yml", guide)
+        self.assertNotIn("Branch from and target **`main`**", guide)
+        for invariant in (
+            "modularity invariant", "Thin routers", "project folder is sacred",
+            "belongs to the watcher",
+        ):
+            self.assertIn(invariant, guide)
+        for command in (
+            "unittest discover -s tests -t .",
+            "bash tests/install_sh_harness.sh",
+            "./scripts/check_plugin_sync.sh",
+        ):
+            self.assertIn(command, guide)
+        # No hard-coded test count anywhere contributors read: it drifts with
+        # every PR, and a stale number is worse than none.
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        developing = (ROOT / "DEVELOPING.md").read_text(encoding="utf-8")
+        for doc in (guide, readme, developing):
+            self.assertNotRegex(doc, r"\b\d{2,3} tests\b")
+        self.assertNotIn("expect 146", developing)
+        # Security reports must never be steered into a public issue body, and
+        # the guide must not link GitHub private reporting until it is enabled.
+        self.assertIn("request for a private channel", guide)
+        self.assertNotIn("security/advisories/new", guide)
+        # Windows contributors are told, up front, to use WSL.
+        self.assertIn("On Windows, use WSL", guide)
+
+        self.assertIn("[CONTRIBUTING.md](CONTRIBUTING.md)", readme)
+        self.assertNotIn("branch from it and target it", readme)
+
     def test_installer_tells_you_how_to_come_back_and_never_nests(self) -> None:
         """Ctrl-C hands back a bare prompt; the banner must have said how to
         start again. And the one-liner run from inside ./xo-space must reuse

@@ -186,8 +186,9 @@ local deployments — the environment contract that selects behavior — is §9.
 **Validation playbook — run before every commit:**
 
 ```bash
-# 1. Import gate + route parity under each agent (expect 146 / 149 / 173 / 148)
-for a in claude_code openclaw hermes antigravity; do
+# 1. Import gate + route parity under each agent. Counts differ per agent by
+#    design and drift with every route added — read them, don't assert a number.
+for a in claude_code codex openclaw hermes antigravity; do
   AGENT_NAME=$a venv/bin/python -c "import server; \
     print('$a', len(server.app.openapi()['paths']))"
 done

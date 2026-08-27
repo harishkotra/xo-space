@@ -20,7 +20,7 @@ Cursor shows up as session telemetry.
 [![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109%2B-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![License](https://img.shields.io/github/license/quirq-ai/xo-space?style=flat-square)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-100%20unittest-2C2C2C?style=flat-square)](tests/)
+[![Tests](https://img.shields.io/badge/tests-unittest-2C2C2C?style=flat-square)](tests/)
 
 </div>
 
@@ -491,7 +491,7 @@ xo-space/
 │                                     projects, tree, sessions, wiki, secrets, quirq, chat)
 ├── plugin/  .claude-plugin/        Claude Code plugin + marketplace manifest
 ├── .agents/                        the same plugin for Codex, plus this repo's agent skills
-├── tests/                          14 unittest modules, 100 tests
+├── tests/                          flat unittest suite (one TestCase per module)
 ├── scripts/                        install_shared_deps.sh, check_plugin_sync.sh, list_runtime_mounts.py
 ├── utils/                          commands.py, local_port.py
 ├── docs/                           openclaw-usage-sync-flow.md
@@ -518,12 +518,13 @@ Per-agent lifecycle scripts live at `config/agents/<name>/agent.sh` (formerly ro
 
 | Where | What |
 |---|---|
-| **In-app Wiki** — `http://localhost:5002/space/#/wiki` | The operating manual, version-matched to the checkout: fifteen sections covering the storage map, installation, watcher internals, complete `.xo` and `.quirq` data catalogs, collaboration, one section per UI tab, and flow-building recipes |
+| **In-app Wiki** — `http://localhost:5002/space/#/wiki` | The operating manual, version-matched to the checkout: sixteen pages covering the storage map, installation, your first run, watcher internals, complete `.xo` and `.quirq` data catalogs, collaboration, one section per UI tab, and flow-building recipes |
 | **`/docs` · `/redoc` · `/openapi.json`** on a running server | The canonical API reference. The shape changes with the active runtime, so a generated page is the only page that can be right |
 | [DEVELOPING.md](DEVELOPING.md) | Engineering guide: broker/adapter architecture, the two planes, the capability loader, adding a new agent, the modularity invariant, the validation playbook |
 | [INSTALLATION.md](INSTALLATION.md) | Prerequisites, the agent CLI, where local data goes, running from a clone, configuration, Windows |
 | [space_ui/README.md](space_ui/README.md) | The Space UI: every module, the view contract, how the folder is served |
 | [plugin/README.md](plugin/README.md) | The Claude Code plugin (`/quirq:status`, `/quirq:install`, `/quirq:start`) and its Codex twin |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute: reporting bugs, dev setup, the ground rules, testing, branches and PRs, review |
 | [AGENTS.md](AGENTS.md) / [CLAUDE.md](CLAUDE.md) | The rules an agent editing this repo has to follow |
 | [docs/openclaw-usage-sync-flow.md](docs/openclaw-usage-sync-flow.md) | How OpenClaw usage reaches the daily sync |
 
@@ -533,7 +534,7 @@ The GitHub wiki has no pages; the in-app Wiki is the maintained one.
 
 ## Contributing
 
-Issues and PRs welcome. `main` is the default branch and where work lands — branch from it and target it. The codebase is ~45k lines of Python across 228 modules plus a build-free ~9k-line front end in `space_ui/`.
+Issues and PRs welcome — [CONTRIBUTING.md](CONTRIBUTING.md) is the guide: how to report a bug, set up a dev environment, the ground rules, and the PR process. Branch from and target **`development`**; `main` is the release branch the one-liner installs from, and maintainers merge `development` into it. The codebase is ~45k lines of Python across 228 modules plus a build-free ~9k-line front end in `space_ui/`.
 
 | Want to… | Start at |
 |---|---|
@@ -545,10 +546,10 @@ Issues and PRs welcome. `main` is the default branch and where work lands — br
 
 Changes that touch the adapter contract, the session model, the `.xo` layout, or the `/xo/*.json` views need their documentation in the same PR: `DEVELOPING.md` for architecture, `space_ui/js/views/wiki.js` for the in-app manual.
 
-Before opening a PR:
+Before opening a PR (Linux/macOS, or WSL on Windows):
 
 ```bash
-venv/bin/python -m unittest discover -s tests -t .        # 100 tests
+venv/bin/python -m unittest discover -s tests -t .        # the suite prints its own count
 AGENT_NAME=claude_code venv/bin/python -c "import server" # import gate; repeat per agent
 ./scripts/check_plugin_sync.sh                            # if you touched plugin/ or .agents/
 ```
