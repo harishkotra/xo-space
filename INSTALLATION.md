@@ -20,6 +20,23 @@ Docker is not required. The command:
 
 Press Ctrl-C to stop it. Run the same command again to update and restart.
 
+## Stopping and starting again
+
+Ctrl-C stops the server; nothing supervises it, so nothing restarts it. The
+startup banner prints both ways back, from the directory you installed in:
+
+```bash
+./xo-space/install.sh                      # start again, no update
+curl -fsSL https://quirq.ai/install | sh   # update to the latest main, then start
+```
+
+Running the one-liner from *inside* `./xo-space` is fine: the installer
+notices it is standing in a checkout and uses that one, with the directory
+above as the workspace, rather than cloning a second copy into it. It also
+leaves a checkout alone when it has local changes, or when it is on a branch
+other than the one it tracks (`main`, or `QUIRQ_SOURCE_REF`), so a
+development clone is never silently reset.
+
 The short URL serves a small POSIX-sh bootstrap that downloads `install.sh`
 to a temporary file and runs it under `bash`, which is why `| sh` works. If
 you fetch `install.sh` itself, pipe it to `bash`, not `sh` — the script uses

@@ -550,6 +550,29 @@ class SpaceWikiTests(unittest.TestCase):
         # Nothing may be installed beyond requirements.txt.
         self.assertIn("QUIRQ_SKIP_BOOT_INSTALL", code)
 
+    def test_installer_tells_you_how_to_come_back_and_never_nests(self) -> None:
+        """Ctrl-C hands back a bare prompt; the banner must have said how to
+        start again. And the one-liner run from inside ./xo-space must reuse
+        that checkout, not clone a second one into it (which makes the outer
+        checkout the projects root and leaves it dirty forever)."""
+
+        lines = (ROOT / "install.sh").read_text(encoding="utf-8").splitlines()
+        code = "\n".join(
+            line for line in lines if not line.lstrip().startswith("#")
+        )
+        self.assertIn("print_restart_hint", code)
+        self.assertIn("Start again later:", code)
+        self.assertIn("https://quirq.ai/install", code)
+        # The launch directory itself is probed for a checkout.
+        self.assertIn('"${LAUNCH_DIR}/server.py"', code)
+        # A checkout on another branch is left alone, like a dirty one.
+        self.assertIn("rev-parse --abbrev-ref HEAD", code)
+
+        guide = (ROOT / "INSTALLATION.md").read_text(encoding="utf-8")
+        wiki = (ROOT / "space_ui" / "js" / "views" / "wiki.js").read_text(encoding="utf-8")
+        for doc in (guide, wiki):
+            self.assertIn("./xo-space/install.sh", doc)
+
     def test_installer_claims_no_container_only_capabilities(self) -> None:
         """Setting either would make the Setup tab offer a restart control
         that cannot work: nothing supervises a foreground process."""

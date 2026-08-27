@@ -692,8 +692,11 @@ function installationArticle(){
           and piping that to <code>bash</code> yourself does the same thing.</p></li>
           <li><b>Open the workspace.</b>
           <code>http://localhost:5002/space/</code>
-          <p>Press Ctrl-C to stop the server. Re-run the same installer
-          command whenever you want to update and restart.</p></li>
+          <p>Press Ctrl-C to stop the server. To start it again without
+          updating, run <code>./xo-space/install.sh</code> from the same
+          directory; re-run the installer command whenever you want to update
+          and restart. The banner prints both before the server takes over
+          the terminal.</p></li>
         </ol>
       </section>
 
@@ -795,8 +798,11 @@ function installationArticle(){
           <h2>Stop, update, restart</h2>
           <code>Ctrl-C</code>
           <p>The server runs in the foreground; nothing supervises it, so
-          the Setup tab cannot restart it for you. Stop it with Ctrl-C and
-          re-run the installer command to update and restart. The Setup tab can
+          the Setup tab cannot restart it for you. Stop it with Ctrl-C, then
+          <code>./xo-space/install.sh</code> starts it again as it was and
+          re-running the installer command updates it first. Running that
+          command from inside <code>./xo-space</code> reuses the checkout
+          rather than nesting a second one. The Setup tab can
           fast-forward the checkout in place instead of a re-run, but the
           running process keeps the old code — and a root saved there keeps the
           old root — until it is stopped and started again. Projects and
