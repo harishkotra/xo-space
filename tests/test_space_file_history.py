@@ -243,6 +243,31 @@ class FileCommitDiffTests(RepoFixture):
             with self.assertRaises(ValueError):
                 file_commit_diff("demo", "notes.md", head, commit_path=bad_path)
 
+    def test_snapshots_carry_the_file_on_both_sides_of_the_commit(self) -> None:
+        from services.cowork_agent.file_history import file_commit_diff
+
+        project = self.make_project("demo", repo=True)
+        first = self.commit_file(project, "page.html", "<p>one</p>\n", "first")
+        second = self.commit_file(project, "page.html", "<p>two</p>\n", "second")
+
+        out = file_commit_diff("demo", "page.html", second, snapshots=True)
+        self.assertEqual(out["before"], "<p>one</p>\n")
+        self.assertEqual(out["after"], "<p>two</p>\n")
+        # A root commit has no parent: the file was born here.
+        born = file_commit_diff("demo", "page.html", first, snapshots=True)
+        self.assertIsNone(born["before"])
+        self.assertEqual(born["after"], "<p>one</p>\n")
+
+    def test_snapshots_are_absent_unless_asked_for(self) -> None:
+        from services.cowork_agent.file_history import file_commit_diff
+
+        project = self.make_project("demo", repo=True)
+        head = self.commit_file(project, "page.html", "<p>x</p>\n", "only")
+
+        out = file_commit_diff("demo", "page.html", head)
+        self.assertIsNone(out["before"])
+        self.assertIsNone(out["after"])
+
     def test_oversized_diff_is_truncated_on_a_line(self) -> None:
         from services.cowork_agent.file_history import file_commit_diff
 
@@ -311,10 +336,26 @@ class PreviewWindowUITests(unittest.TestCase):
         self.assertIn(".pv-d-del", css)
         self.assertIn(".pv-commit", css)
 
+    def test_md_and_html_commits_render_the_diff_as_a_preview(self) -> None:
+        js = (ROOT / "space_ui" / "js" / "core" / "preview.js").read_text(encoding="utf-8")
+        css = (ROOT / "space_ui" / "css" / "preview.css").read_text(encoding="utf-8")
+        # Markdown hunks render through the same escaping renderer as the
+        # live preview; HTML renders whole before/after documents in the
+        # same empty-sandbox iframes. Both can drop to the raw patch.
+        self.assertIn("mdToHtml(h.del.join(", js)
+        self.assertIn("mdToHtml(h.add.join(", js)
+        self.assertIn("snapshots=1", js)
+        self.assertIn('sandbox=""', js)
+        self.assertIn('data-dmode="source"', js)
+        self.assertIn(".pv-rd-del", css)
+        self.assertIn(".pv-rd-add", css)
+        self.assertIn(".pv-d-modes", css)
+
     def test_cache_stamps_were_bumped_for_this_change(self) -> None:
         index = (ROOT / "space_ui" / "index.html").read_text(encoding="utf-8")
         app = (ROOT / "space_ui" / "js" / "app.js").read_text(encoding="utf-8")
-        for stale in ("20260816-preview1", "20260825-rename1", "20260827-float1"):
+        for stale in ("20260816-preview1", "20260825-rename1",
+                      "20260827-float1", "20260827-explore1"):
             self.assertNotIn(f"css/preview.css?v={stale}", index)
             self.assertNotIn(f"core/preview.js?v={stale}", app)
 

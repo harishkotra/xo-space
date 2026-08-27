@@ -27,6 +27,9 @@ GIT_TIMEOUT_SECONDS = 10
 # One file's patch in one commit; anything larger is a generated artifact
 # the UI has no business rendering line by line.
 DIFF_MAX_CHARS = 192 * 1024
+# Full before/after snapshots for the rendered diff preview — same ceiling
+# as the live file preview (PREVIEW_MAX_BYTES in the BFF).
+SNAPSHOT_MAX_CHARS = 256 * 1024
 _COMMIT_RE = re.compile(r"[0-9a-fA-F]{4,40}")
 # Fields split by unit separators, records by a record separator: none of
 # the four can appear in a hash, a name, an ISO date, or a one-line subject
@@ -220,13 +223,25 @@ def _safe_repo_pathspec(value: str) -> str:
     return value
 
 
+def _snapshot(toplevel: Path, rev: str, pathspec: str, max_chars: int) -> str | None:
+    """The file's content at ``rev``, or ``None`` when it has none there
+    (the rev does not exist — a root commit's parent — or the path was
+    not in its tree)."""
+    proc = _git(["show", f"{rev}:{pathspec}"], cwd=toplevel)
+    if proc is None or proc.returncode != 0:
+        return None
+    return proc.stdout[:max_chars]
+
+
 def file_commit_diff(
     name: str,
     relative_path: str,
     commit: str,
     *,
     commit_path: str | None = None,
+    snapshots: bool = False,
     max_chars: int = DIFF_MAX_CHARS,
+    snapshot_max_chars: int = SNAPSHOT_MAX_CHARS,
 ) -> dict | None:
     """One commit's patch, limited to one file.
 
@@ -239,6 +254,13 @@ def file_commit_diff(
     ``diff`` is ``None`` when the commit cannot be shown (unknown hash,
     or no repo) and ``""`` when the commit simply has no textual patch
     for this file (a pure rename, a merge, a binary change).
+
+    With ``snapshots`` the result also carries ``before`` and ``after``
+    — the whole file at the commit's first parent and at the commit —
+    for previews that render the document rather than its patch lines.
+    Either side is ``None`` when the file has no content there: a file
+    born in this commit has no ``before``, one deleted by it no
+    ``after``, and a rename's old name is not asked about at all.
     """
     if not _COMMIT_RE.fullmatch(commit or ""):
         raise ValueError("commit must be an abbreviated or full hex hash")
@@ -253,6 +275,8 @@ def file_commit_diff(
         "is_repo": False,
         "diff": None,
         "truncated": False,
+        "before": None,
+        "after": None,
     }
     toplevel = located["toplevel"]
     if toplevel is None:
@@ -287,4 +311,9 @@ def file_commit_diff(
         text = text[:max_chars].rsplit("\n", 1)[0] + "\n"
         result["truncated"] = True
     result["diff"] = text
+    if snapshots:
+        result["before"] = _snapshot(
+            toplevel, f"{commit}^", pathspec, snapshot_max_chars
+        )
+        result["after"] = _snapshot(toplevel, commit, pathspec, snapshot_max_chars)
     return result

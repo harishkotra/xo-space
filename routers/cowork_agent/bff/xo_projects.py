@@ -479,7 +479,11 @@ def project_file_history(
 
 class FileDiffResponse(BaseModel):
     """``diff`` is ``None`` when the commit cannot be shown at all and
-    ``""`` when it holds no textual patch for this file."""
+    ``""`` when it holds no textual patch for this file. ``before`` and
+    ``after`` — the whole file on each side of the commit, for rendered
+    previews — are only populated when ``snapshots`` was asked for, and
+    are individually ``None`` when the file has no content on that side
+    (born in this commit, deleted by it, or renamed onto this name)."""
 
     project_id: str
     relative_path: str
@@ -487,6 +491,8 @@ class FileDiffResponse(BaseModel):
     is_repo: bool
     diff: Optional[str] = None
     truncated: bool
+    before: Optional[str] = None
+    after: Optional[str] = None
 
 
 @router.get(
@@ -498,6 +504,7 @@ def project_file_diff(
     relative_path: str,
     commit: str,
     commit_path: Optional[str] = None,
+    snapshots: bool = False,
 ) -> FileDiffResponse:
     """Return one commit's patch for one project file."""
     if not project_dir_exists(project_id):
@@ -508,7 +515,11 @@ def project_file_diff(
 
     try:
         raw = file_commit_diff(
-            project_id, relative_path, commit, commit_path=commit_path
+            project_id,
+            relative_path,
+            commit,
+            commit_path=commit_path,
+            snapshots=snapshots,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -537,4 +548,6 @@ def project_file_diff(
         is_repo=raw["is_repo"],
         diff=raw["diff"],
         truncated=raw["truncated"],
+        before=raw["before"],
+        after=raw["after"],
     )

@@ -28,7 +28,16 @@
    document exactly as it was. Each commit row expands in place into that
    commit's patch for this file (the /file-diff endpoint), added lines green,
    removed lines red; diffs load lazily and are cached per commit for as long
-   as the file stays open. */
+   as the file stays open.
+
+   For markdown and HTML the expanded commit defaults to a RENDERED diff —
+   the change as the document shows it, not as its source spells it. Markdown
+   renders each hunk's removed and added lines through the same mdToHtml the
+   live preview uses, framed red and green; HTML shows the whole document
+   before and after the commit in the same empty-sandbox iframes as the live
+   preview, because a fragment of HTML torn from its document renders as
+   nothing meaningful. A Preview/Source switch on each expanded commit drops
+   to the raw patch lines; plain text files only ever get the patch. */
 import {API_BASE,apiFetch} from './api.js';
 import {mdToHtml} from './markdown.js';
 
@@ -191,10 +200,6 @@ function historyHTML(){
 /* One expanded commit: the unified diff classed line by line. The patch is
    plain text from git; every line is escaped, the classes only color it. */
 function diffHTML(d){
-  if(d.error)return'<div class="pv-note">'+esc(d.error)+'</div>';
-  if(d.diff==null)return'<div class="pv-note">Could not show this commit.</div>';
-  if(!d.diff.trim())return'<div class="pv-note">No line changes for this file '
-    +'in this commit — a rename, merge or binary change.</div>';
   const cls=l=>
     /^(diff --git|index |--- |\+\+\+ |new file|deleted file|similarity|rename |old mode|new mode|Binary files)/.test(l)?'pv-d-meta'
     :l.startsWith('@@')?'pv-d-hunk'
@@ -203,6 +208,69 @@ function diffHTML(d){
   return d.diff.replace(/\n$/,'').split('\n').map(l=>
     '<div class="pv-d-line '+cls(l)+'">'+esc(l||' ')+'</div>').join('')
     +(d.truncated?'<div class="pv-note">Diff truncated — showing the first 192 KB.</div>':'');
+}
+
+/* The patch, regrouped for rendering: each @@ hunk's removed and added
+   lines, with the file-header noise before the first @@ dropped. */
+function parseHunks(diff){
+  const hunks=[];let h=null;
+  for(const l of diff.split('\n')){
+    if(l.startsWith('@@')){h={del:[],add:[]};hunks.push(h);continue;}
+    if(!h)continue;
+    if(l.startsWith('+'))h.add.push(l.slice(1));
+    else if(l.startsWith('-'))h.del.push(l.slice(1));
+  }
+  return hunks.filter(h=>h.del.length||h.add.length);
+}
+
+/* Markdown, diffed as the document reads: every hunk's removed lines
+   rendered red, its added lines rendered green — mdToHtml escapes before it
+   transforms, exactly as in the live preview. */
+function mdDiffHTML(d){
+  const hunks=parseHunks(d.diff);
+  if(!hunks.length)return'<div class="pv-note">No rendered changes to show.</div>';
+  return hunks.map(h=>'<div class="pv-rd-hunk">'
+    +(h.del.length?'<div class="pv-rd pv-rd-del"><i>removed</i>'
+      +'<div class="pv-md">'+mdToHtml(h.del.join('\n'))+'</div></div>':'')
+    +(h.add.length?'<div class="pv-rd pv-rd-add"><i>added</i>'
+      +'<div class="pv-md">'+mdToHtml(h.add.join('\n'))+'</div></div>':'')
+    +'</div>').join('')
+    +(d.truncated?'<div class="pv-note">Diff truncated — showing the first 192 KB.</div>':'');
+}
+
+/* HTML, diffed as two whole documents: the file before and after the
+   commit, each in the same empty-sandbox iframe as the live preview. */
+const rdFrame=(label,cls,content)=>'<div class="pv-rd '+cls+'"><i>'+label+'</i>'
+  +'<iframe class="pv-frame pv-rd-frame" sandbox="" referrerpolicy="no-referrer" '
+  +'title="'+label+'" srcdoc="'+esc(content)+'"></iframe></div>';
+function htmlDiffHTML(d){
+  if(d.before==null&&d.after==null)
+    return'<div class="pv-note">No document to render on either side of this commit.</div>';
+  return'<div class="pv-rd-pair">'
+    +(d.before==null?'<div class="pv-rd pv-rd-del"><i>before</i>'
+        +'<div class="pv-note">The file did not exist before this commit.</div></div>'
+      :rdFrame('before','pv-rd-del',d.before))
+    +(d.after==null?'<div class="pv-rd pv-rd-add"><i>after</i>'
+        +'<div class="pv-note">This commit deleted the file.</div></div>'
+      :rdFrame('after','pv-rd-add',d.after))
+    +'</div>';
+}
+
+/* The expanded commit's pane. Markdown and HTML get a rendered preview by
+   default with a switch down to the raw patch; text kinds are the patch. */
+function paneHTML(d,dmode){
+  if(d.error)return'<div class="pv-note">'+esc(d.error)+'</div>';
+  if(d.diff==null)return'<div class="pv-note">Could not show this commit.</div>';
+  if(!d.diff.trim())return'<div class="pv-note">No line changes for this file '
+    +'in this commit — a rename, merge or binary change.</div>';
+  const kind=data?.kind;
+  if(kind!=='markdown'&&kind!=='html')return diffHTML(d);
+  const body=dmode==='source'?diffHTML(d)
+    :kind==='markdown'?mdDiffHTML(d):htmlDiffHTML(d);
+  return'<div class="pv-d-modes">'
+    +'<button type="button" data-dmode="preview"'+(dmode!=='source'?' class="is-on"':'')+'>Preview</button>'
+    +'<button type="button" data-dmode="source"'+(dmode==='source'?' class="is-on"':'')+'>Source</button>'
+    +'</div>'+body;
 }
 
 async function toggleDiff(row){
@@ -220,17 +288,20 @@ async function toggleDiff(row){
   const hash=row.dataset.hash,mine=token,mydiffs=diffs;
   let d=mydiffs.get(hash);
   if(!d){
+    /* Only the HTML preview needs whole documents (its diff renders as
+       before/after); markdown rebuilds its rendered hunks from the patch. */
     const res=await apiFetch(API_BASE+'/api/xo-projects/'+encodeURIComponent(current.project)
       +'/file-diff?relative_path='+encodeURIComponent(current.path)
       +'&commit='+encodeURIComponent(hash)
-      +(row.dataset.path?'&commit_path='+encodeURIComponent(row.dataset.path):''));
+      +(row.dataset.path?'&commit_path='+encodeURIComponent(row.dataset.path):'')
+      +(data?.kind==='html'?'&snapshots=1':''));
     if(mine!==token)return; /* the file changed or closed while loading */
     d=res.ok?res.data:{error:res.offline?'xo-space is unreachable'
       :res.error||'Could not read this commit.'};
     mydiffs.set(hash,d);
   }
   if(!row.isConnected)return; /* the list re-rendered under the fetch */
-  pane.innerHTML=diffHTML(d);
+  pane.innerHTML=paneHTML(d,pane.dataset.dmode);
 }
 
 async function loadHistory(){
@@ -257,7 +328,15 @@ function onClick(e){
     render();
     return;
   }
-  /* A click inside an expanded diff is reading, not toggling. */
+  /* The Preview/Source switch of an expanded commit repaints its pane. */
+  const dbtn=e.target.closest('.pv-d-modes button');
+  if(dbtn&&diffs){
+    const pane=dbtn.closest('.pv-diff'),row=pane.closest('.pv-commit');
+    const d=diffs.get(row?.dataset.hash);
+    if(d){pane.dataset.dmode=dbtn.dataset.dmode;pane.innerHTML=paneHTML(d,pane.dataset.dmode);}
+    return;
+  }
+  /* Any other click inside an expanded diff is reading, not toggling. */
   if(e.target.closest('.pv-diff'))return;
   const row=e.target.closest('.pv-commit');
   if(row&&mode==='history'&&current)toggleDiff(row);

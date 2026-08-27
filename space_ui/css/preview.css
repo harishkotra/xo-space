@@ -102,6 +102,39 @@
   .pv-d-ctx{color:var(--ink-2)}
   .pv-diff .pv-note{padding:2px 12px}
 
+  /* Preview ⇄ Source switch of an expanded commit */
+  .pv-d-modes{display:flex;gap:5px;padding:2px 10px 8px;
+    border-bottom:1px solid var(--line-soft)}
+  .pv-d-modes button{
+    font:400 9.5px var(--mono);letter-spacing:.09em;text-transform:uppercase;
+    color:var(--ink-3);border:1px solid transparent;border-radius:999px;
+    padding:3px 9px;cursor:pointer;transition:all .16s var(--ease);
+  }
+  .pv-d-modes button:hover{color:var(--ink)}
+  .pv-d-modes button.is-on{color:var(--ink);border-color:var(--line);
+    background:var(--bg-3)}
+
+  /* rendered diff — the change as the document shows it, not as its
+     source spells it: removed content framed red, added framed green */
+  .pv-rd-hunk{padding:9px 10px 3px}
+  .pv-rd-hunk+.pv-rd-hunk{border-top:1px dashed var(--line-soft)}
+  .pv-rd{border-left:3px solid;border-radius:4px;padding:6px 11px 7px;
+    margin:0 0 8px}
+  .pv-rd>i{display:block;font:400 8.5px var(--mono);font-style:normal;
+    letter-spacing:.14em;text-transform:uppercase;margin-bottom:4px}
+  .pv-rd-del{border-color:var(--err);background:rgba(200,103,76,.07)}
+  .pv-rd-del>i{color:var(--err)}
+  .pv-rd-add{border-color:var(--accent);background:rgba(168,217,79,.06)}
+  .pv-rd-add>i{color:var(--accent)}
+  .pv-rd .pv-md{font-size:12.5px}
+  .pv-rd .pv-note{padding:2px 0}
+
+  /* HTML before/after — two sandboxed documents side by side */
+  .pv-rd-pair{display:flex;gap:9px;padding:9px 10px}
+  .pv-rd-pair .pv-rd{flex:1;min-width:0;margin:0}
+  .pv-rd-frame{min-height:260px;height:300px}
+  @media (max-width:760px){.pv-rd-pair{flex-direction:column}}
+
   /* rendered markdown — same restrained typography as the wiki articles */
   .pv-md{font-size:13.5px;line-height:1.68;color:var(--ink-2)}
   .pv-md h1,.pv-md h2,.pv-md h3,.pv-md h4,.pv-md h5,.pv-md h6{
