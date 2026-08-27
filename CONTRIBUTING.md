@@ -94,9 +94,11 @@ reporter in the fix's notes unless you prefer otherwise.
 
 ## Set up a dev environment
 
-Linux or macOS. Prerequisites: `git`, Python 3.12+ (the installer downloads
-one via uv if you have none), and — only for chat — an agent CLI such as
-`npm install -g @anthropic-ai/claude-code`.
+**Linux or macOS. On Windows, use WSL** (Ubuntu is fine) and do everything
+below — clone, run, test — inside it; the server does not run on native
+Windows (see [Windows](#windows)). Prerequisites: `git`, Python 3.12+ (the
+installer downloads one via uv if you have none), and — only for chat — an
+agent CLI such as `npm install -g @anthropic-ai/claude-code`.
 
 ```bash
 git clone https://github.com/quirq-ai/xo-space.git
@@ -296,9 +298,10 @@ run yet, so "how you verified it" in the description carries real weight.
 
 ## Windows
 
-The server does not run on native Windows: the watcher imports `fcntl`, the
-boot hooks are bash, and the installer needs bash. Use WSL for running and
-testing. From a Windows checkout you can still edit and do static checks
+**Use WSL.** The server does not run on native Windows: the watcher imports
+`fcntl`, the boot hooks are bash, and the installer needs bash. Clone and work
+inside a WSL distribution (Ubuntu), and run the validation there. From a
+Windows-side checkout you can still edit and do static checks
 (`python -m compileall`, `node --check`, the text-level tests). Two things bite:
 `core.autocrlf` makes working copies CRLF, so judge a shell script's line
 endings on the blob (`git ls-files --eol <file>` must say `i/lf`) and strip

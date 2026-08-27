@@ -610,11 +610,17 @@ class SpaceWikiTests(unittest.TestCase):
             "./scripts/check_plugin_sync.sh",
         ):
             self.assertIn(command, guide)
-        # No hard-coded test count: it drifts every week.
-        self.assertNotRegex(guide, r"\b\d{2,3} tests\b")
-        self.assertIn("security/advisories/new", guide)
-
+        # No hard-coded test count anywhere contributors read: it drifts with
+        # every PR, and a stale number is worse than none.
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        developing = (ROOT / "DEVELOPING.md").read_text(encoding="utf-8")
+        for doc in (guide, readme, developing):
+            self.assertNotRegex(doc, r"\b\d{2,3} tests\b")
+        self.assertNotIn("expect 146", developing)
+        self.assertIn("security/advisories/new", guide)
+        # Windows contributors are told, up front, to use WSL.
+        self.assertIn("On Windows, use WSL", guide)
+
         self.assertIn("[CONTRIBUTING.md](CONTRIBUTING.md)", readme)
         self.assertNotIn("branch from it and target it", readme)
 

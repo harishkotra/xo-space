@@ -20,7 +20,7 @@ Cursor shows up as session telemetry.
 [![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109%2B-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![License](https://img.shields.io/github/license/quirq-ai/xo-space?style=flat-square)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-100%20unittest-2C2C2C?style=flat-square)](tests/)
+[![Tests](https://img.shields.io/badge/tests-unittest-2C2C2C?style=flat-square)](tests/)
 
 </div>
 
@@ -491,7 +491,7 @@ xo-space/
 │                                     projects, tree, sessions, wiki, secrets, quirq, chat)
 ├── plugin/  .claude-plugin/        Claude Code plugin + marketplace manifest
 ├── .agents/                        the same plugin for Codex, plus this repo's agent skills
-├── tests/                          14 unittest modules, 100 tests
+├── tests/                          flat unittest suite (one TestCase per module)
 ├── scripts/                        install_shared_deps.sh, check_plugin_sync.sh, list_runtime_mounts.py
 ├── utils/                          commands.py, local_port.py
 ├── docs/                           openclaw-usage-sync-flow.md
@@ -546,10 +546,10 @@ Issues and PRs welcome — [CONTRIBUTING.md](CONTRIBUTING.md) is the guide: how 
 
 Changes that touch the adapter contract, the session model, the `.xo` layout, or the `/xo/*.json` views need their documentation in the same PR: `DEVELOPING.md` for architecture, `space_ui/js/views/wiki.js` for the in-app manual.
 
-Before opening a PR:
+Before opening a PR (Linux/macOS, or WSL on Windows):
 
 ```bash
-venv/bin/python -m unittest discover -s tests -t .        # 100 tests
+venv/bin/python -m unittest discover -s tests -t .        # the suite prints its own count
 AGENT_NAME=claude_code venv/bin/python -c "import server" # import gate; repeat per agent
 ./scripts/check_plugin_sync.sh                            # if you touched plugin/ or .agents/
 ```
