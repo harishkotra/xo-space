@@ -64,90 +64,20 @@
     border-radius:9px;background:#fff;
   }
 
-  /* git history — one row per commit, newest first; a row opens into that
-     commit's diff for this file */
-  .pv-hist{list-style:none;margin:0;padding:0}
-  .pv-hist li{padding:11px 2px;border-bottom:1px solid var(--line-soft)}
-  .pv-hist li:last-child{border-bottom:0}
-  .pv-commit{cursor:pointer}
-  .pv-commit:hover .pv-hist-head span{color:var(--accent)}
-  .pv-hist-head{display:flex;align-items:baseline;gap:9px;min-width:0}
-  .pv-caret{flex:none;width:0;height:0;align-self:center;
-    border-left:5px solid var(--ink-4);border-top:4px solid transparent;
-    border-bottom:4px solid transparent;transition:transform .16s var(--ease)}
-  .pv-commit.is-open .pv-caret{transform:rotate(90deg);border-left-color:var(--ink-2)}
-  .pv-hist-head code{flex:none;font:400 10.5px var(--mono);color:var(--accent);
-    background:var(--bg-3);border:1px solid var(--line-soft);border-radius:5px;
-    padding:1px 6px}
-  .pv-hist-head span{font-size:12.5px;line-height:1.45;color:var(--ink)}
-  .pv-hist-meta{margin-top:4px;padding-left:14px;
-    font:400 10.5px var(--mono);color:var(--ink-3)}
-  .pv-hist-meta .pv-add{font-weight:400;color:var(--accent)}
-  .pv-hist-meta .pv-del{font-weight:400;color:var(--err)}
-
-  /* the expanded commit — added lines green, removed lines red */
-  .pv-diff{
-    margin:10px 0 3px 14px;padding:7px 0;cursor:auto;
-    border:1px solid var(--line-soft);border-radius:8px;background:rgba(9,11,14,.6);
-    overflow-x:auto;
+  /* the version picker — the file's git history as a dropdown; hidden
+     until /file-history proves there is one. Styled like the pill buttons
+     beside it; the native popup does the listing. */
+  #preview-version{
+    max-width:200px;appearance:none;-webkit-appearance:none;cursor:pointer;
+    font:400 10px var(--mono);letter-spacing:.06em;
+    color:var(--ink-2);background:var(--bg-3);border:1px solid var(--line);
+    border-radius:999px;padding:5px 24px 5px 11px;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23b3ada0'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 9px center;
+    transition:all .16s var(--ease);
   }
-  .pv-d-line{
-    padding:1px 12px;font:400 11px/1.6 var(--mono);
-    white-space:pre-wrap;word-break:break-word;tab-size:2;
-  }
-  .pv-d-add{background:rgba(168,217,79,.10);color:#c4e18d}
-  .pv-d-del{background:rgba(200,103,76,.13);color:#e0a08c}
-  .pv-d-hunk{color:var(--ink-3);padding-top:7px;letter-spacing:.02em}
-  .pv-d-meta{color:var(--ink-4)}
-  .pv-d-ctx{color:var(--ink-2)}
-  .pv-diff .pv-note{padding:2px 12px}
-
-  /* Preview ⇄ Source switch of an expanded commit */
-  .pv-d-modes{display:flex;gap:5px;padding:2px 10px 8px;
-    border-bottom:1px solid var(--line-soft)}
-  .pv-d-modes button{
-    font:400 9.5px var(--mono);letter-spacing:.09em;text-transform:uppercase;
-    color:var(--ink-3);border:1px solid transparent;border-radius:999px;
-    padding:3px 9px;cursor:pointer;transition:all .16s var(--ease);
-  }
-  .pv-d-modes button:hover{color:var(--ink)}
-  .pv-d-modes button.is-on{color:var(--ink);border-color:var(--line);
-    background:var(--bg-3)}
-
-  /* markdown redline — one merged rendered document, tracked-changes
-     style: deleted content struck through red, added content green */
-  .pv-gd-key{padding:8px 14px 0;font:400 10px var(--mono);color:var(--ink-3)}
-  .pv-gd{padding:10px 16px 14px}
-  .pv-gd-del,.pv-gd .pv-gd-del *{color:var(--err)!important}
-  .pv-gd-del{
-    text-decoration:line-through;text-decoration-color:var(--err);
-    text-decoration-thickness:1.5px;background:rgba(200,103,76,.09);
-    border-radius:3px;padding:0 2px;
-  }
-  .pv-gd-ins,.pv-gd .pv-gd-ins *{color:var(--accent)!important}
-  .pv-gd-ins{
-    text-decoration:underline;text-decoration-color:rgba(168,217,79,.55);
-    text-underline-offset:2px;background:rgba(168,217,79,.07);
-    border-radius:3px;padding:0 2px;
-  }
-
-  /* HTML before/after — the change as two whole rendered documents */
-  .pv-rd{border-left:3px solid;border-radius:4px;padding:6px 11px 7px;
-    margin:0 0 8px}
-  .pv-rd>i{display:block;font:400 8.5px var(--mono);font-style:normal;
-    letter-spacing:.14em;text-transform:uppercase;margin-bottom:4px}
-  .pv-rd-del{border-color:var(--err);background:rgba(200,103,76,.07)}
-  .pv-rd-del>i{color:var(--err)}
-  .pv-rd-add{border-color:var(--accent);background:rgba(168,217,79,.06)}
-  .pv-rd-add>i{color:var(--accent)}
-  .pv-rd .pv-md{font-size:12.5px}
-  .pv-rd .pv-note{padding:2px 0}
-
-  /* HTML before/after — two sandboxed documents side by side */
-  .pv-rd-pair{display:flex;gap:9px;padding:9px 10px}
-  .pv-rd-pair .pv-rd{flex:1;min-width:0;margin:0}
-  .pv-rd-frame{min-height:260px;height:300px}
-  @media (max-width:760px){.pv-rd-pair{flex-direction:column}}
+  #preview-version:hover{color:var(--ink);border-color:#39404d}
+  #preview-version option{background:#14171c;color:var(--ink-2)}
 
   /* rendered markdown — same restrained typography as the wiki articles */
   .pv-md{font-size:13.5px;line-height:1.68;color:var(--ink-2)}

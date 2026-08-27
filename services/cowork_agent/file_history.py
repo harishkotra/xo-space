@@ -1,9 +1,10 @@
 """Git history of one file inside a project, for the previewer.
 
-The previewer's History pane answers "who edited this file, and when" —
-a question only the project's own git repository can. This helper shells
-out to ``git log --follow`` and shapes the output; it never writes to
-the repository.
+The previewer's version picker answers two questions only the project's
+own git repository can: "who edited this file, and when" (the version
+list, via ``git log --follow``), and "what did it say back then" (one
+version's content, via ``git show``). These helpers shape that output;
+they never write to the repository.
 
 Path validation is delegated to ``project_layout.read_project_file``
 (called with ``max_bytes=0``), so the address space stays exactly the
@@ -24,12 +25,9 @@ from pathlib import Path
 from services.cowork_agent.project_layout import project_dir, read_project_file
 
 GIT_TIMEOUT_SECONDS = 10
-# One file's patch in one commit; anything larger is a generated artifact
-# the UI has no business rendering line by line.
-DIFF_MAX_CHARS = 192 * 1024
-# Full before/after snapshots for the rendered diff preview — same ceiling
-# as the live file preview (PREVIEW_MAX_BYTES in the BFF).
-SNAPSHOT_MAX_CHARS = 256 * 1024
+# One version's content — same ceiling as the live file preview
+# (PREVIEW_MAX_BYTES in the BFF).
+VERSION_MAX_CHARS = 256 * 1024
 _COMMIT_RE = re.compile(r"[0-9a-fA-F]{4,40}")
 # Fields split by unit separators, records by a record separator: none of
 # the four can appear in a hash, a name, an ISO date, or a one-line subject
@@ -223,27 +221,15 @@ def _safe_repo_pathspec(value: str) -> str:
     return value
 
 
-def _snapshot(toplevel: Path, rev: str, pathspec: str, max_chars: int) -> str | None:
-    """The file's content at ``rev``, or ``None`` when it has none there
-    (the rev does not exist — a root commit's parent — or the path was
-    not in its tree)."""
-    proc = _git(["show", f"{rev}:{pathspec}"], cwd=toplevel)
-    if proc is None or proc.returncode != 0:
-        return None
-    return proc.stdout[:max_chars]
-
-
-def file_commit_diff(
+def read_file_at_commit(
     name: str,
     relative_path: str,
     commit: str,
     *,
     commit_path: str | None = None,
-    snapshots: bool = False,
-    max_chars: int = DIFF_MAX_CHARS,
-    snapshot_max_chars: int = SNAPSHOT_MAX_CHARS,
+    max_chars: int = VERSION_MAX_CHARS,
 ) -> dict | None:
-    """One commit's patch, limited to one file.
+    """One version of a project file: its content at one commit.
 
     ``relative_path`` is the file as it exists *today* — it anchors
     validation and repo discovery. ``commit_path`` is the file's name at
@@ -251,16 +237,12 @@ def file_commit_diff(
     differs from today's name across renames; without it, ``git show``
     would be asked about a path the old commit never knew.
 
-    ``diff`` is ``None`` when the commit cannot be shown (unknown hash,
-    or no repo) and ``""`` when the commit simply has no textual patch
-    for this file (a pure rename, a merge, a binary change).
-
-    With ``snapshots`` the result also carries ``before`` and ``after``
-    — the whole file at the commit's first parent and at the commit —
-    for previews that render the document rather than its patch lines.
-    Either side is ``None`` when the file has no content there: a file
-    born in this commit has no ``before``, one deleted by it no
-    ``after``, and a rename's old name is not asked about at all.
+    Returns ``None`` when the project or the file does not exist, and
+    raises ``ValueError`` for an unsafe path or a malformed commit.
+    ``content`` is ``None`` when the version cannot be produced — no
+    repository owns the file, the commit is unknown, or the path was not
+    in that commit's tree — and the ``is_repo`` flag says which of those
+    it was.
     """
     if not _COMMIT_RE.fullmatch(commit or ""):
         raise ValueError("commit must be an abbreviated or full hex hash")
@@ -268,52 +250,31 @@ def file_commit_diff(
     if located is None:
         return None
 
+    pathspec = (
+        _safe_repo_pathspec(commit_path)
+        if commit_path is not None
+        else located["in_repo"]
+    )
     result = {
         "project_id": located["project_id"],
         "relative_path": located["rel"],
         "commit": commit,
+        "name": (pathspec or located["rel"]).rsplit("/", 1)[-1],
         "is_repo": False,
-        "diff": None,
+        "content": None,
         "truncated": False,
-        "before": None,
-        "after": None,
     }
     toplevel = located["toplevel"]
     if toplevel is None:
         return result
     result["is_repo"] = True
 
-    pathspec = (
-        _safe_repo_pathspec(commit_path)
-        if commit_path is not None
-        else located["in_repo"]
-    )
-    # -M keeps a rename commit readable as a rename; --format= drops the
-    # commit header the history pane already shows.
-    proc = _git(
-        [
-            "show",
-            commit,
-            "--format=",
-            "--patch",
-            "--no-color",
-            "-M",
-            "--",
-            pathspec,
-        ],
-        cwd=toplevel,
-    )
+    proc = _git(["show", f"{commit}:{pathspec}"], cwd=toplevel)
     if proc is None or proc.returncode != 0:
         return result
-    text = proc.stdout
-    if len(text) > max_chars:
-        # Cut on a line so the UI never renders half a diff line.
-        text = text[:max_chars].rsplit("\n", 1)[0] + "\n"
+    content = proc.stdout
+    if len(content) > max_chars:
+        content = content[:max_chars]
         result["truncated"] = True
-    result["diff"] = text
-    if snapshots:
-        result["before"] = _snapshot(
-            toplevel, f"{commit}^", pathspec, snapshot_max_chars
-        )
-        result["after"] = _snapshot(toplevel, commit, pathspec, snapshot_max_chars)
+    result["content"] = content
     return result

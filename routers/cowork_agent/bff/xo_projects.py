@@ -25,7 +25,7 @@ from routers.cowork_agent.bff.filters import (
     is_root_only_hidden,
 )
 from services.cowork_agent import scopes
-from services.cowork_agent.file_history import file_commit_diff, file_git_history
+from services.cowork_agent.file_history import file_git_history, read_file_at_commit
 from services.cowork_agent.project_layout import (
     list_project_tree,
     list_projects,
@@ -328,18 +328,87 @@ class FilePreviewResponse(BaseModel):
     content: str
 
 
+def _version_response(
+    project_id: str,
+    relative_path: str,
+    commit: str,
+    commit_path: Optional[str],
+) -> FilePreviewResponse:
+    """The /file response for a historical version of the file."""
+    try:
+        raw = read_file_at_commit(
+            project_id, relative_path, commit, commit_path=commit_path
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "invalid_version_request",
+                "message": "commit or commit_path is malformed.",
+            },
+        ) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "scope_unavailable", "message": "File is not readable."},
+        ) from exc
+
+    if raw is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "file_not_found", "message": "File not found in project."},
+        )
+    if raw["content"] is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "version_not_found",
+                "message": (
+                    "No repository owns this file."
+                    if not raw["is_repo"]
+                    else "This commit has no version of the file."
+                ),
+            },
+        )
+
+    return FilePreviewResponse(
+        project_id=raw["project_id"],
+        relative_path=raw["relative_path"],
+        name=raw["name"],
+        kind=_preview_kind(raw["name"]),
+        size_bytes=len(raw["content"].encode("utf-8")),
+        modified_at=None,
+        truncated=raw["truncated"],
+        content=raw["content"],
+    )
+
+
 @router.get(
     "/api/xo-projects/{project_id}/file",
     response_model=FilePreviewResponse,
 )
-def project_file(project_id: str, relative_path: str) -> FilePreviewResponse:
-    """Return one previewable text file's content."""
+def project_file(
+    project_id: str,
+    relative_path: str,
+    commit: Optional[str] = None,
+    commit_path: Optional[str] = None,
+) -> FilePreviewResponse:
+    """Return one previewable text file's content.
+
+    With ``commit`` (and, across renames, ``commit_path`` — the ``path``
+    field of the matching /file-history item) the content comes from
+    that commit instead of the working tree, so the previewer's version
+    picker can show the document as it was.
+    """
     if not project_dir_exists(project_id):
         raise HTTPException(
             status_code=404,
             detail={"code": "project_not_found", "message": "Project not found."},
         )
-    suffix = PurePosixPath(relative_path or "").suffix.lower()
+    # The gate judges the name the content will carry: the historical
+    # name when a version is asked for, today's name otherwise.
+    gate_name = commit_path if (commit and commit_path) else relative_path
+    suffix = PurePosixPath(gate_name or "").suffix.lower()
     if suffix not in PREVIEW_SUFFIXES:
         raise HTTPException(
             status_code=415,
@@ -348,6 +417,9 @@ def project_file(project_id: str, relative_path: str) -> FilePreviewResponse:
                 "message": f"No text preview for {suffix or 'this file type'}.",
             },
         )
+
+    if commit is not None:
+        return _version_response(project_id, relative_path, commit, commit_path)
 
     try:
         raw = read_project_file(
@@ -402,7 +474,8 @@ class FileHistoryCommit(BaseModel):
     ``additions``/``deletions`` are ``None`` when git has no counts to
     give: a binary file, or a commit that only renamed it. ``path`` is
     the file's name at that commit — echo it back as ``commit_path``
-    when asking /file-diff about the commit, so renames diff correctly.
+    back as ``commit_path`` when asking /file for that version, so
+    renamed files resolve under the name the commit knew.
     """
 
     hash: str
@@ -467,87 +540,4 @@ def project_file_history(
         is_repo=raw["is_repo"],
         items=[FileHistoryCommit(**item) for item in raw["items"]],
         total=len(raw["items"]),
-    )
-
-
-# ── /api/xo-projects/{id}/file-diff ───────────────────────────────────────────
-#
-# One history commit, opened: the file's patch in that commit, for the
-# previewer's red/green line view. ``commit`` and ``commit_path`` come from a
-# /file-history item; ``relative_path`` stays the file as it exists today.
-
-
-class FileDiffResponse(BaseModel):
-    """``diff`` is ``None`` when the commit cannot be shown at all and
-    ``""`` when it holds no textual patch for this file. ``before`` and
-    ``after`` — the whole file on each side of the commit, for rendered
-    previews — are only populated when ``snapshots`` was asked for, and
-    are individually ``None`` when the file has no content on that side
-    (born in this commit, deleted by it, or renamed onto this name)."""
-
-    project_id: str
-    relative_path: str
-    commit: str
-    is_repo: bool
-    diff: Optional[str] = None
-    truncated: bool
-    before: Optional[str] = None
-    after: Optional[str] = None
-
-
-@router.get(
-    "/api/xo-projects/{project_id}/file-diff",
-    response_model=FileDiffResponse,
-)
-def project_file_diff(
-    project_id: str,
-    relative_path: str,
-    commit: str,
-    commit_path: Optional[str] = None,
-    snapshots: bool = False,
-) -> FileDiffResponse:
-    """Return one commit's patch for one project file."""
-    if not project_dir_exists(project_id):
-        raise HTTPException(
-            status_code=404,
-            detail={"code": "project_not_found", "message": "Project not found."},
-        )
-
-    try:
-        raw = file_commit_diff(
-            project_id,
-            relative_path,
-            commit,
-            commit_path=commit_path,
-            snapshots=snapshots,
-        )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "code": "invalid_diff_request",
-                "message": "commit or path is malformed.",
-            },
-        ) from exc
-    except OSError as exc:
-        raise HTTPException(
-            status_code=500,
-            detail={"code": "scope_unavailable", "message": "File is not readable."},
-        ) from exc
-
-    if raw is None:
-        raise HTTPException(
-            status_code=404,
-            detail={"code": "file_not_found", "message": "File not found in project."},
-        )
-
-    return FileDiffResponse(
-        project_id=raw["project_id"],
-        relative_path=raw["relative_path"],
-        commit=raw["commit"],
-        is_repo=raw["is_repo"],
-        diff=raw["diff"],
-        truncated=raw["truncated"],
-        before=raw["before"],
-        after=raw["after"],
     )
