@@ -518,12 +518,13 @@ Per-agent lifecycle scripts live at `config/agents/<name>/agent.sh` (formerly ro
 
 | Where | What |
 |---|---|
-| **In-app Wiki** — `http://localhost:5002/space/#/wiki` | The operating manual, version-matched to the checkout: fifteen sections covering the storage map, installation, watcher internals, complete `.xo` and `.quirq` data catalogs, collaboration, one section per UI tab, and flow-building recipes |
+| **In-app Wiki** — `http://localhost:5002/space/#/wiki` | The operating manual, version-matched to the checkout: sixteen pages covering the storage map, installation, your first run, watcher internals, complete `.xo` and `.quirq` data catalogs, collaboration, one section per UI tab, and flow-building recipes |
 | **`/docs` · `/redoc` · `/openapi.json`** on a running server | The canonical API reference. The shape changes with the active runtime, so a generated page is the only page that can be right |
 | [DEVELOPING.md](DEVELOPING.md) | Engineering guide: broker/adapter architecture, the two planes, the capability loader, adding a new agent, the modularity invariant, the validation playbook |
 | [INSTALLATION.md](INSTALLATION.md) | Prerequisites, the agent CLI, where local data goes, running from a clone, configuration, Windows |
 | [space_ui/README.md](space_ui/README.md) | The Space UI: every module, the view contract, how the folder is served |
 | [plugin/README.md](plugin/README.md) | The Claude Code plugin (`/quirq:status`, `/quirq:install`, `/quirq:start`) and its Codex twin |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute: reporting bugs, dev setup, the ground rules, testing, branches and PRs, review |
 | [AGENTS.md](AGENTS.md) / [CLAUDE.md](CLAUDE.md) | The rules an agent editing this repo has to follow |
 | [docs/openclaw-usage-sync-flow.md](docs/openclaw-usage-sync-flow.md) | How OpenClaw usage reaches the daily sync |
 
@@ -533,7 +534,7 @@ The GitHub wiki has no pages; the in-app Wiki is the maintained one.
 
 ## Contributing
 
-Issues and PRs welcome. `main` is the default branch and where work lands — branch from it and target it. The codebase is ~45k lines of Python across 228 modules plus a build-free ~9k-line front end in `space_ui/`.
+Issues and PRs welcome — [CONTRIBUTING.md](CONTRIBUTING.md) is the guide: how to report a bug, set up a dev environment, the ground rules, and the PR process. Branch from and target **`development`**; `main` is the release branch the one-liner installs from, and maintainers merge `development` into it. The codebase is ~45k lines of Python across 228 modules plus a build-free ~9k-line front end in `space_ui/`.
 
 | Want to… | Start at |
 |---|---|
