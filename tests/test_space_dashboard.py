@@ -168,7 +168,7 @@ class DashboardUiTests(unittest.TestCase):
             "vault",
             "orbits",
             "pulsar",
-            "heatlanes",
+            "branches",
             "watcher",
             "forks",
             "galaxy",

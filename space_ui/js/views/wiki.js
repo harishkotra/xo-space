@@ -202,10 +202,10 @@ const TAB_GUIDES={
     name:'Dashboard',
     kicker:'Tab guide · Eight cards, eight visualizations',
     title:'Dashboard: the whole workspace in eight luminous cards',
-    intro:'The Dashboard is a bento grid of eight canvas cards — q1 to q8, left to right, two rows of four — each one an animated, generative visualization of real workspace data, sharing one visual system (single accent hue per card, white-hot additive glow, ink-gray text). q1 Security &amp; Setup (vault of secret/env/setup file embers), q2 Agent Sessions (luminous session rings per runtime), q3 Tools &amp; Logs (tool-call pulsar with a log equalizer), q4 Git History (commit heat lanes per repo), q5 Quirq (breathing watcher core with file fireflies), q6 Agent Workspaces (repo filaments and task capsules), q7 Projects (the purpose-environment cluster), q8 XO Data (glass treemaps of .xo files).',
+    intro:'The Dashboard is a bento grid of eight canvas cards — q1 to q8, left to right, two rows of four — each one an animated, generative visualization of real workspace data, sharing one visual system (single accent hue per card, white-hot additive glow, ink-gray text). q1 Security &amp; Setup (vault of secret/env/setup file embers), q2 Agent Sessions (luminous session rings per runtime), q3 Tools &amp; Logs (tool-call pulsar with a log equalizer), q4 Git History (branch timelines per repo — every branch a lit lane, tags as date-pinned diamonds), q5 Quirq (breathing watcher core with file fireflies), q6 Agent Workspaces (repo filaments and task capsules), q7 Projects (the purpose-environment cluster), q8 XO Data (glass treemaps of .xo files).',
     facts:['one card per region','eight bespoke renderers','names and sizes only — never secret contents','read-only'],
     jobs:[
-      ['Survey the machine','Every card reads at a glance: its caption bar carries the region name and a headline stat — how many secret-like files, tool calls, commits, worktrees, session archives.'],
+      ['Survey the machine','Every card reads at a glance: its caption bar carries the region name and a headline stat — how many secret-like files, tool calls, branches and tags, worktrees, session archives.'],
       ['Open a card','Click a card to expand it to the full stage — labels, hero figures, and hover tooltips appear at that size. Esc (or the ✕) returns to the grid. Deep-link one with #/dashboard?focus=q4.'],
       ['Inspect an artifact','In an expanded card, hover any ember, bead, ray, cell, star, or tile for its hover card; secret-adjacent entries show the name and path only — contents are never read.'],
       ['Read the motion','Brightness is recency and glow is magnitude; the animation is ambient, not data (and stills completely under prefers-reduced-motion).']
@@ -213,7 +213,7 @@ const TAB_GUIDES={
     sources:[
       ['GET /xo/dashboard.json','Serves &lt;XO root&gt;/.xo/dashboard.json — schema 2: a regions array, each with kind-specific data, built by the watcher from one workspace scan (visualizer/dashboard_regions.py).','Workspace .xo file'],
       ['Filesystem scans','q1 scans project trees (bounded, prune-aware) for env/secret/setup names; q2 lists ~/.claude and ~/.cursor session archives; q5 lists ~/.quirq; q6 finds .git-file worktree markers and ~/.claude/tasks; q8 lists .xo directories.','Names, sizes, dates only'],
-      ['Session telemetry','q3 aggregates daily tool-call counts from the sessions view payload; q4 reads the same git history that feeds the Timeline.','Derived, no prompt text'],
+      ['Session telemetry','q3 aggregates daily tool-call counts from the sessions view payload; q4 asks each repository's own git for branches, tags, HEAD and per-branch commit days — read-only and bounded.','Derived, no prompt text'],
       ['<XO root>/<project>/.xo/project.json','q7 keeps the classic classifier: a saved category takes precedence over filename heuristics.','Portable project metadata']
     ],
     steps:[

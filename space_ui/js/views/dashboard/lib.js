@@ -13,7 +13,7 @@ export const SERIF=`"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif
 export const SANS=`system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif`;
 export const MONO=`ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace`;
 
-/* q4's commit-heat ramp — validated ordinal ramp (monotone L, single hue) */
+/* the commit-heat ramp (q4 beads) — validated ordinal ramp (monotone L, single hue) */
 export const HEAT_RAMP=['#1b4f85','#2a6fbd','#4a8fdd','#79b3f0','#b3d7fa'];
 
 const clamp01=v=>v<0?0:v>1?1:v;

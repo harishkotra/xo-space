@@ -26,13 +26,13 @@ import {hexA,tint} from './dashboard/lib.js';
 import vault from './dashboard/cards/vault.js';
 import orbits from './dashboard/cards/orbits.js';
 import pulsar from './dashboard/cards/pulsar.js';
-import heatlanes from './dashboard/cards/heatlanes.js';
+import branches from './dashboard/cards/branches.js';
 import watcher from './dashboard/cards/watcher.js';
 import forks from './dashboard/cards/forks.js';
 import galaxy from './dashboard/cards/galaxy.js';
 import treemap from './dashboard/cards/treemap.js';
 
-const RENDERERS={vault,orbits,pulsar,heatlanes,watcher,forks,galaxy,treemap};
+const RENDERERS={vault,orbits,pulsar,branches,watcher,forks,galaxy,treemap};
 const REDUCED=matchMedia('(prefers-reduced-motion: reduce)').matches;
 /* the registry normalises the hash to #/dashboard before mount runs, so a
    ?focus=qN deep link must be captured at load time */

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,6 +13,20 @@ from services.cowork_agent.visualizer.dashboard_regions import (
     REGIONS,
     build_dashboard_regions,
 )
+
+GIT_ENV = {
+    **os.environ,
+    "GIT_AUTHOR_NAME": "Test Author",
+    "GIT_AUTHOR_EMAIL": "test@example.com",
+    "GIT_COMMITTER_NAME": "Test Author",
+    "GIT_COMMITTER_EMAIL": "test@example.com",
+}
+
+
+def _git(cwd: Path, *args: str) -> None:
+    subprocess.run(
+        ["git", *args], cwd=cwd, env=GIT_ENV, check=True, capture_output=True
+    )
 
 
 def _fake_source() -> dict:
@@ -41,6 +57,7 @@ def _fake_source() -> dict:
     }
 
 
+@unittest.skipIf(shutil.which("git") is None, "git is not installed")
 class DashboardRegionsTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -49,7 +66,18 @@ class DashboardRegionsTests(unittest.TestCase):
 
         self.root = base / "xo-projects"
         alpha = self.root / "alpha"
-        (alpha / ".git").mkdir(parents=True)  # a real checkout
+        alpha.mkdir(parents=True)
+        # a real checkout: two branches and a tag for the q4 timelines
+        _git(alpha, "init", "-q", "-b", "main")
+        (alpha / "app.py").write_text("print('hi')\n")
+        _git(alpha, "add", "app.py")
+        _git(alpha, "commit", "-q", "-m", "first")
+        _git(alpha, "tag", "v1")
+        _git(alpha, "checkout", "-q", "-b", "feature")
+        (alpha / "feature.py").write_text("pass\n")
+        _git(alpha, "add", "feature.py")
+        _git(alpha, "commit", "-q", "-m", "grow feature")
+        _git(alpha, "checkout", "-q", "main")
         (alpha / ".env").write_text("SECRET=value-that-must-not-leak")
         (alpha / "install.sh").write_text("#!/bin/sh\n")
         (alpha / "config").mkdir()
@@ -135,14 +163,29 @@ class DashboardRegionsTests(unittest.TestCase):
         self.assertEqual("2026-08-06", bash["day"])
         self.assertIn("argusd.log", {l["name"] for l in pulsar["logs"]})
 
-    def test_heatlanes_hold_checkouts_and_exclude_worktrees(self) -> None:
-        lanes = self.regions["q4"]["data"]
-        names = [repo["name"] for repo in lanes["repos"]]
+    def test_branches_map_refs_and_exclude_worktrees(self) -> None:
+        q4 = self.regions["q4"]
+        self.assertEqual("branches", q4["kind"])
+        names = [repo["name"] for repo in q4["data"]["repos"]]
         self.assertIn("alpha", names)
         self.assertNotIn("alpha-wt", names)
-        alpha = next(r for r in lanes["repos"] if r["name"] == "alpha")
-        self.assertEqual(3, alpha["total"])
-        self.assertLess(lanes["start"], lanes["end"])
+        alpha = next(r for r in q4["data"]["repos"] if r["name"] == "alpha")
+        self.assertEqual("main", alpha["head"])
+        self.assertEqual("main", alpha["default"])
+        by_name = {b["name"]: b for b in alpha["branches"]}
+        self.assertEqual({"main", "feature"}, set(by_name))
+        main = by_name["main"]
+        self.assertTrue(main["isHead"])
+        self.assertTrue(main["isDefault"])
+        self.assertIsNone(main["ahead"])  # the default measures nobody
+        feature = by_name["feature"]
+        self.assertEqual(1, feature["ahead"])
+        self.assertEqual(0, feature["behind"])
+        self.assertTrue(feature["days"])  # commit days inside the window
+        self.assertTrue(all(d["n"] >= 1 for d in feature["days"]))
+        self.assertEqual(["v1"], [t["name"] for t in alpha["tags"]])
+        self.assertTrue(alpha["tags"][0]["date"])
+        self.assertLess(q4["data"]["start"], q4["data"]["end"])
 
     def test_watcher_groups_state_and_watcher_files(self) -> None:
         files = {f["name"]: f for f in self.regions["q5"]["data"]["files"]}

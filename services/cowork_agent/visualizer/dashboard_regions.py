@@ -7,7 +7,7 @@ two rows of four, left to right) — rough clusters like galaxies, each a
     q1 Security & Setup   vault wall     tiles per secret/env/setup file
     q2 Agent Sessions     orbit rings    one ring per runtime, session beads
     q3 Tools & Logs       pulsar chart   radial bars per tool + log slabs
-    q4 Git History        heat lanes     commit-day cells per repository
+    q4 Git History        branches       branch/tag timelines per repository
     q5 Quirq              watcher core   concentric freshness rings
     q6 Agent Workspaces   branch forks   worktrees off repo trunks + tasks
     q7 Projects           cluster galaxy the classic purpose-environment map
@@ -24,6 +24,7 @@ never reads the contents of anything it classifies as a secret — a leaf for
 
 from __future__ import annotations
 
+import subprocess
 import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -52,7 +53,7 @@ _KINDS = {
     "q1": "vault",
     "q2": "orbits",
     "q3": "pulsar",
-    "q4": "heatlanes",
+    "q4": "branches",
     "q5": "watcher",
     "q6": "forks",
     "q7": "galaxy",
@@ -75,7 +76,7 @@ _DESCRIPTIONS = {
     "q1": "Secrets, env files, credentials, and setup surfaces — names only, never contents.",
     "q2": "Session archives from .claude, .cursor, and project .xo/sessions.",
     "q3": "External tool calls and system logs across runtimes.",
-    "q4": "Commit history per repository; agent worktrees excluded.",
+    "q4": "Branches, tags and heads per repository; agent worktrees excluded.",
     "q5": "The machine-local .quirq watcher state.",
     "q6": "Git worktrees and other agentic working state.",
     "q7": "The workspace's projects, gathered into purpose environments.",
@@ -98,7 +99,7 @@ _SECRET_SUFFIXES = {".pem", ".p12", ".keystore"}
 _SETUP_NAMES = {"dockerfile", "makefile", "install.sh", "setup.sh", "setup.py"}
 _CONFIG_SUFFIXES = {".ini", ".json", ".toml", ".yaml", ".yml"}
 
-_HEAT_DAYS = 112  # 16 weeks of history in the q4 lanes
+_HEAT_DAYS = 112  # 16 weeks: the window of the q4 branch timelines
 
 
 def _mtime_date(path: Path) -> str | None:
@@ -334,39 +335,148 @@ def _pulsar_data(workspace_xo: Path, home: Path) -> dict:
     }
 
 
-# ── q4: heat lanes ───────────────────────────────────────────────────────────
+# ── q4: branch timelines ─────────────────────────────────────────────────────
+#
+# Each repository answered by its OWN git, read-only and bounded: branches
+# (newest-committed first), tags, HEAD, and per-branch commit days inside the
+# window — enough for the card to draw every branch as a lit timeline and pin
+# tags to their dates. Same gate as before: a checkout has a .git *directory*;
+# an agent worktree has a .git *file* pointing home, and belongs to q6.
+
+_BRANCH_REPO_LIMIT = 12  # repos on the card
+_BRANCH_LIMIT = 8        # branch lanes per repo
+_TAG_LIMIT = 6           # tag markers per repo
+_GIT_TIMEOUT = 5
 
 
-def _heatlanes_data(projects_root: Path, git_history: dict) -> dict:
+def _run_git(repo: Path, *args: str) -> str | None:
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(repo), *args],
+            capture_output=True,
+            text=True,
+            timeout=_GIT_TIMEOUT,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return proc.stdout if proc.returncode == 0 else None
+
+
+def _branch_days(repo: Path, branch: str, since: str) -> list[dict]:
+    """Unique commit days on one branch inside the window, oldest first."""
+    out = _run_git(
+        repo, "log", branch, f"--since={since}", "--format=%cs", "-n", "400", "--"
+    )
+    days: dict[str, int] = {}
+    for day in (out or "").split():
+        days[day] = days.get(day, 0) + 1
+    return [{"d": d, "n": n} for d, n in sorted(days.items())]
+
+
+def _ahead_behind(repo: Path, default: str, branch: str) -> tuple[int | None, int | None]:
+    out = _run_git(
+        repo, "rev-list", "--left-right", "--count", f"{default}...{branch}", "--"
+    )
+    parts = (out or "").split()
+    if len(parts) != 2:
+        return None, None
+    try:
+        return int(parts[1]), int(parts[0])  # ahead of, behind the default
+    except ValueError:
+        return None, None
+
+
+def _repo_refs(repo: Path) -> tuple[list[dict], list[dict]]:
+    """(branches, tags) from for-each-ref, newest committerdate first.
+
+    Annotated tags carry their date in ``*committerdate`` (the commit the
+    tag wraps); lightweight tags in ``committerdate`` itself.
+    """
+    out = _run_git(
+        repo,
+        "for-each-ref",
+        "--sort=-committerdate",
+        "--format=%(refname)\x1f%(objectname:short=9)\x1f%(committerdate:short)\x1f%(*committerdate:short)",
+        "refs/heads",
+        "refs/tags",
+    )
+    branches: list[dict] = []
+    tags: list[dict] = []
+    for line in (out or "").splitlines():
+        fields = line.split("\x1f")
+        if len(fields) != 4:
+            continue
+        ref, tip, cdate, tagged = fields
+        if ref.startswith("refs/heads/"):
+            branches.append(
+                {"name": ref[len("refs/heads/"):], "tip": tip, "tipDate": cdate}
+            )
+        elif ref.startswith("refs/tags/"):
+            tags.append(
+                {"name": ref[len("refs/tags/"):], "tip": tip, "date": tagged or cdate}
+            )
+    return branches, tags
+
+
+def _branches_data(projects_root: Path) -> dict:
     end = date.today()
     start = end - timedelta(days=_HEAT_DAYS - 1)
+    since = start.isoformat()
     repos = []
-    commit_total = 0
+    branch_total = 0
+    tag_total = 0
     for project in _list_project_dirs(projects_root):
-        # A checkout has a .git *directory*; an agent worktree has a .git
-        # *file* pointing home — those belong to q6, not the history lanes.
         if not (project / ".git").is_dir():
             continue
-        days = [
+        all_branches, all_tags = _repo_refs(project)
+        head_out = _run_git(project, "symbolic-ref", "--short", "-q", "HEAD")
+        head = (head_out or "").strip() or None
+        names = {b["name"] for b in all_branches}
+        default = next(
+            (n for n in ("main", "master") if n in names), head
+        )
+        branches = []
+        for b in all_branches[:_BRANCH_LIMIT]:
+            days = _branch_days(project, b["name"], since)
+            ahead = behind = None
+            if default and b["name"] != default:
+                ahead, behind = _ahead_behind(project, default, b["name"])
+            branches.append(
+                {
+                    **b,
+                    "isHead": b["name"] == head,
+                    "isDefault": b["name"] == default,
+                    "n": sum(d["n"] for d in days),
+                    "days": days,
+                    "ahead": ahead,
+                    "behind": behind,
+                }
+            )
+        branch_total += len(all_branches)
+        tag_total += len(all_tags)
+        repos.append(
             {
-                "d": str(day.get("d") or ""),
-                "n": int(day.get("n") or 0),
-                "s": [str(s) for s in (day.get("s") or [])[:3]],
+                "name": project.name,
+                "head": head,
+                "default": default,
+                "branchTotal": len(all_branches),
+                "tagTotal": len(all_tags),
+                "branches": branches,
+                "tags": all_tags[:_TAG_LIMIT],
+                "lastDate": max(
+                    (b["tipDate"] for b in all_branches), default=""
+                ),
             }
-            for day in git_history.get(f"p_{project.name}") or []
-            if str(day.get("d") or "") >= start.isoformat()
-        ]
-        total = sum(day["n"] for day in days)
-        commit_total += total
-        repos.append({"name": project.name, "total": total, "days": days})
-    repos.sort(key=lambda repo: -repo["total"])
+        )
+    repos.sort(key=lambda repo: repo["lastDate"], reverse=True)
+    repos = repos[:_BRANCH_REPO_LIMIT]
     return {
         "data": {
             "repos": repos,
-            "start": start.isoformat(),
+            "start": since,
             "end": end.isoformat(),
         },
-        "stat": f"{len(repos)} repos · {commit_total} commits in {_HEAT_DAYS // 7} weeks",
+        "stat": f"{len(repos)} repos · {branch_total} branches · {tag_total} tags",
         "count": len(repos),
     }
 
@@ -586,7 +696,7 @@ def build_dashboard_regions(
         "q1": _vault_data(projects_root),
         "q2": _orbits_data(projects_root, home),
         "q3": _pulsar_data(workspace_xo, home),
-        "q4": _heatlanes_data(projects_root, source.get("gitHistory") or {}),
+        "q4": _branches_data(projects_root),
         "q5": _watcher_data(home),
         "q6": _forks_data(projects_root, home),
         "q7": _galaxy_data(source),
