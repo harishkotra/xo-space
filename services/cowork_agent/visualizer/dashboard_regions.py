@@ -476,7 +476,8 @@ def _branches_data(projects_root: Path) -> dict:
             "start": since,
             "end": end.isoformat(),
         },
-        "stat": f"{len(repos)} repos · {branch_total} branches · {tag_total} tags",
+        "stat": f"{len(repos)} repos · {branch_total} branches · "
+        f"{tag_total} tag{'' if tag_total == 1 else 's'}",
         "count": len(repos),
     }
 
