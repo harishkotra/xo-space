@@ -501,6 +501,7 @@ xo-space/
 ├── cowork-update.sh                git pull + restart in background
 ├── quirq                           one-command Docker launcher
 ├── install.sh                      no-clone remote installer
+├── uninstall.sh                    clean removal; projects are kept (INSTALLATION.md)
 ├── INSTALLATION.md                 local installation guide
 ├── DEVELOPING.md                   engineering guide — architecture, adding an agent, validation
 ├── AGENTS.md  CLAUDE.md            working rules for agents editing this repo
