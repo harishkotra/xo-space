@@ -213,7 +213,7 @@ const TAB_GUIDES={
     sources:[
       ['GET /xo/dashboard.json','Serves &lt;XO root&gt;/.xo/dashboard.json — schema 2: a regions array, each with kind-specific data, built by the watcher from one workspace scan (visualizer/dashboard_regions.py).','Workspace .xo file'],
       ['Filesystem scans','q1 scans project trees (bounded, prune-aware) for env/secret/setup names; q2 lists ~/.claude and ~/.cursor session archives; q5 lists ~/.quirq; q6 finds .git-file worktree markers and ~/.claude/tasks; q8 lists .xo directories.','Names, sizes, dates only'],
-      ['Session telemetry','q3 aggregates daily tool-call counts from the sessions view payload; q4 asks each repository's own git for branches, tags, HEAD and per-branch commit days — read-only and bounded.','Derived, no prompt text'],
+      ['Session telemetry','q3 aggregates daily tool-call counts from the sessions view payload; q4 asks each repository’s own git for branches, tags, HEAD and per-branch commit days — read-only and bounded.','Derived, no prompt text'],
       ['<XO root>/<project>/.xo/project.json','q7 keeps the classic classifier: a saved category takes precedence over filename heuristics.','Portable project metadata']
     ],
     steps:[
