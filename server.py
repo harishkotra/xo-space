@@ -836,7 +836,11 @@ async def root(request: Request):
     not ``/space``) — the UI then talks to the API same-origin.
     """
     if "text/html" in request.headers.get("accept", ""):
-        return RedirectResponse(url="/space/", status_code=307)
+        # Carry the query string across the redirect (still percent-encoded),
+        # so links like /?project=x land on /space/?project=x.
+        query = request.url.query
+        url = f"/space/?{query}" if query else "/space/"
+        return RedirectResponse(url=url, status_code=307)
     return {"status": "XO Space API running"}
 
 
