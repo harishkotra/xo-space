@@ -275,7 +275,7 @@ We'd love your help. Found a bug 🐛, want a runtime that isn't here 🧩, or h
 <div align="center">
 
 <a href="https://github.com/quirq-ai/xo-space/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=quirq-ai/xo-space" alt="Contributors" />
+  <img src="https://contrib.rocks/image?repo=quirq-ai/xo-space&max=100" alt="Contributors" />
 </a>
 
 </div>
