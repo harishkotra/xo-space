@@ -1,12 +1,13 @@
 """
-OpenTelemetry GenAI Exporter & Semantic Conventions implementation.
+OpenTelemetry GenAI Semantic Conventions & OTLP Exporter implementation.
 
 Translates xo-space session messages and agent telemetry across all local runtimes
 (Claude Code, Codex, OpenClaw, Hermes, Antigravity, Cursor) into OpenTelemetry
-GenAI Semantic Conventions (v1.28.0+ / v1.30.0 specifications):
+GenAI Semantic Conventions (v1.42.0+ / dedicated open-telemetry/semantic-conventions-genai repository):
 
 Semantic Attributes & Events:
-- gen_ai.system: agent system / provider name (e.g. "claude_code", "codex", "openclaw")
+- gen_ai.provider.name: agent system / provider name (e.g. "claude_code", "codex", "openclaw")
+- gen_ai.system: (legacy fallback maintained for backward compatibility)
 - gen_ai.operation.name: "chat", "tool_call", "agent_run", "session"
 - gen_ai.request.model: requested model (e.g. "claude-3-7-sonnet")
 - gen_ai.response.model: actual model handling request
@@ -36,8 +37,9 @@ import urllib.error
 
 logger = logging.getLogger(__name__)
 
-# OTel GenAI Attribute Constants
-GEN_AI_SYSTEM = "gen_ai.system"
+# OTel GenAI Attribute Constants (v1.42.0+ update: gen_ai.provider.name replaces gen_ai.system)
+GEN_AI_PROVIDER_NAME = "gen_ai.provider.name"
+GEN_AI_SYSTEM = "gen_ai.system"  # Kept for backward compatibility with legacy collectors
 GEN_AI_OPERATION_NAME = "gen_ai.operation.name"
 GEN_AI_REQUEST_MODEL = "gen_ai.request.model"
 GEN_AI_RESPONSE_MODEL = "gen_ai.response.model"
@@ -67,7 +69,7 @@ def build_otel_genai_spans(
     """Convert a session's messages into an array of OTel Trace Spans conforming to GenAI conventions.
 
     Supports full trace trees (session parent span -> chat turn spans -> tool call child spans)
-    with v1.30.0 GenAI Span Events for prompts, completions, and tool payload parameters.
+    with GenAI Span Events for prompts, completions, and tool payload parameters.
     """
     trace_id = _generate_id(16)
     session_span_id = _generate_id(8)
@@ -75,9 +77,12 @@ def build_otel_genai_spans(
 
     now_ns = int(time.time() * 1e9)
 
+    provider_val = agent_name or "unknown"
+
     # Root session span
     session_attributes = [
-        {"key": GEN_AI_SYSTEM, "value": {"stringValue": agent_name or "unknown"}},
+        {"key": GEN_AI_PROVIDER_NAME, "value": {"stringValue": provider_val}},
+        {"key": GEN_AI_SYSTEM, "value": {"stringValue": provider_val}},
         {"key": GEN_AI_SESSION_ID, "value": {"stringValue": session_id}},
         {"key": GEN_AI_OPERATION_NAME, "value": {"stringValue": "agent_session"}},
         {"key": "service.name", "value": {"stringValue": "xo-space"}},
@@ -116,7 +121,8 @@ def build_otel_genai_spans(
         cost = msg.get("data", {}).get("cost", 0.0) or 0.0
 
         turn_attributes = [
-            {"key": GEN_AI_SYSTEM, "value": {"stringValue": agent_name}},
+            {"key": GEN_AI_PROVIDER_NAME, "value": {"stringValue": provider_val}},
+            {"key": GEN_AI_SYSTEM, "value": {"stringValue": provider_val}},
             {"key": GEN_AI_SESSION_ID, "value": {"stringValue": session_id}},
             {"key": GEN_AI_OPERATION_NAME, "value": {"stringValue": "chat"}},
             {"key": GEN_AI_REQUEST_MODEL, "value": {"stringValue": str(model_id)}},
@@ -182,7 +188,8 @@ def build_otel_genai_spans(
             tool_span_id = _generate_id(8)
 
             tool_attributes = [
-                {"key": GEN_AI_SYSTEM, "value": {"stringValue": agent_name}},
+                {"key": GEN_AI_PROVIDER_NAME, "value": {"stringValue": provider_val}},
+                {"key": GEN_AI_SYSTEM, "value": {"stringValue": provider_val}},
                 {"key": GEN_AI_SESSION_ID, "value": {"stringValue": session_id}},
                 {"key": GEN_AI_OPERATION_NAME, "value": {"stringValue": "tool_call"}},
                 {"key": GEN_AI_TOOL_NAME, "value": {"stringValue": str(tool_name)}},
