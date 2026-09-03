@@ -3,11 +3,12 @@ OpenTelemetry GenAI Exporter & Semantic Conventions implementation.
 
 Translates xo-space session messages and agent telemetry across all local runtimes
 (Claude Code, Codex, OpenClaw, Hermes, Antigravity, Cursor) into OpenTelemetry
-GenAI Semantic Conventions (v1.28.0+ / v1.30.0 draft specifications):
+GenAI Semantic Conventions (v1.28.0+ / v1.30.0 specifications):
 
-Semantic Attributes:
+Semantic Attributes & Events:
 - gen_ai.system: agent system / provider name (e.g. "claude_code", "codex", "openclaw")
-- gen_ai.request.model: target or requested model (e.g. "claude-3-7-sonnet")
+- gen_ai.operation.name: "chat", "tool_call", "agent_run", "session"
+- gen_ai.request.model: requested model (e.g. "claude-3-7-sonnet")
 - gen_ai.response.model: actual model handling request
 - gen_ai.usage.input_tokens / prompt_tokens: input token count
 - gen_ai.usage.output_tokens / completion_tokens: output token count
@@ -15,13 +16,15 @@ Semantic Attributes:
 - gen_ai.tool.name: name of tool invoked (e.g. "Bash", "View", "Edit")
 - gen_ai.tool.call_id: identifier for the tool call
 - gen_ai.session.id: session identifier
-- gen_ai.operation.name: "chat", "tool_call", "agent_run"
+- Span Events: gen_ai.content.prompt, gen_ai.content.completion, gen_ai.tool.call
 
-Provides OTLP trace JSON formatting, batch exporter capability, and OTLP HTTP sink forwarding.
+Provides OTLP trace JSON formatting, batch export capability, and asynchronous
+background streaming to remote or local OTLP endpoints (Datadog, Jaeger, Langfuse, Arize Phoenix).
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -63,7 +66,8 @@ def build_otel_genai_spans(
 ) -> List[Dict[str, Any]]:
     """Convert a session's messages into an array of OTel Trace Spans conforming to GenAI conventions.
 
-    Supports full trace trees (session parent span -> chat turn spans -> tool call child spans).
+    Supports full trace trees (session parent span -> chat turn spans -> tool call child spans)
+    with v1.30.0 GenAI Span Events for prompts, completions, and tool payload parameters.
     """
     trace_id = _generate_id(16)
     session_span_id = _generate_id(8)
@@ -92,6 +96,7 @@ def build_otel_genai_spans(
         "startTimeUnixNano": str(now_ns),
         "endTimeUnixNano": str(now_ns + 1000000),
         "attributes": session_attributes,
+        "events": [],
         "status": {"code": 1},  # STATUS_CODE_OK
     }
     spans.append(session_span)
@@ -139,10 +144,21 @@ def build_otel_genai_spans(
             elif p_type == "tool_call":
                 tool_calls.append(part)
 
+        turn_events = []
         if prompt_text:
             turn_attributes.append({"key": GEN_AI_PROMPT, "value": {"stringValue": prompt_text[:2048]}})
+            turn_events.append({
+                "timeUnixNano": str(now_ns + (idx * 1000000)),
+                "name": "gen_ai.content.prompt",
+                "attributes": [{"key": "gen_ai.prompt.role", "value": {"stringValue": "user"}}, {"key": "gen_ai.prompt.text", "value": {"stringValue": prompt_text}}],
+            })
         if completion_text:
             turn_attributes.append({"key": GEN_AI_COMPLETION, "value": {"stringValue": completion_text[:2048]}})
+            turn_events.append({
+                "timeUnixNano": str(now_ns + (idx * 1000000) + 500000),
+                "name": "gen_ai.content.completion",
+                "attributes": [{"key": "gen_ai.completion.role", "value": {"stringValue": "assistant"}}, {"key": "gen_ai.completion.text", "value": {"stringValue": completion_text}}],
+            })
 
         turn_span = {
             "traceId": trace_id,
@@ -153,6 +169,7 @@ def build_otel_genai_spans(
             "startTimeUnixNano": str(now_ns + (idx * 1000000)),
             "endTimeUnixNano": str(now_ns + ((idx + 1) * 1000000)),
             "attributes": turn_attributes,
+            "events": turn_events,
             "status": {"code": 1},
         }
         spans.append(turn_span)
@@ -161,6 +178,7 @@ def build_otel_genai_spans(
         for tool_idx, tool in enumerate(tool_calls):
             tool_name = tool.get("name") or tool.get("tool_name") or "unknown_tool"
             call_id = tool.get("call_id") or tool.get("id") or _generate_id(4)
+            tool_input = tool.get("input") or tool.get("args") or {}
             tool_span_id = _generate_id(8)
 
             tool_attributes = [
@@ -171,6 +189,17 @@ def build_otel_genai_spans(
                 {"key": GEN_AI_TOOL_CALL_ID, "value": {"stringValue": str(call_id)}},
             ]
 
+            tool_events = []
+            if tool_input:
+                tool_events.append({
+                    "timeUnixNano": str(now_ns + (idx * 1000000) + (tool_idx * 10000)),
+                    "name": "gen_ai.tool.call",
+                    "attributes": [
+                        {"key": "gen_ai.tool.name", "value": {"stringValue": str(tool_name)}},
+                        {"key": "gen_ai.tool.parameters", "value": {"stringValue": json.dumps(tool_input)}},
+                    ],
+                })
+
             tool_span = {
                 "traceId": trace_id,
                 "spanId": tool_span_id,
@@ -180,6 +209,7 @@ def build_otel_genai_spans(
                 "startTimeUnixNano": str(now_ns + (idx * 1000000) + (tool_idx * 10000)),
                 "endTimeUnixNano": str(now_ns + (idx * 1000000) + ((tool_idx + 1) * 10000)),
                 "attributes": tool_attributes,
+                "events": tool_events,
                 "status": {"code": 1},
             }
             spans.append(tool_span)
@@ -249,3 +279,12 @@ def export_otlp_traces(
     except Exception as exc:
         logger.warning(f"Failed to export OTLP traces to {target_endpoint}: {exc}")
         return False
+
+
+async def async_export_otlp_traces(
+    spans: List[Dict[str, Any]],
+    endpoint: str = "",
+    headers: Optional[Dict[str, str]] = None,
+) -> bool:
+    """Non-blocking async wrapper to export OTLP traces without blocking main FastAPI event loop."""
+    return await asyncio.to_thread(export_otlp_traces, spans, endpoint, headers)
