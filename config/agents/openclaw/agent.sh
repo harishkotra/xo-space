@@ -554,35 +554,46 @@ install_cli() {
 }
 
 # ==============================================================
-# Setup: Install the @openclaw/codex plugin
+# Setup: Install first-party OpenClaw plugins (codex, slack, ...)
 #
 # Runs right after install_cli on every `setup`. `openclaw plugins install`
 # refuses a plugin id that is already installed (it points at
 # `plugins update` instead), so probe `openclaw plugins list --json` first
 # and skip when the plugin is present. A failed install is a warning, not
 # fatal — the gateway must still start without the plugin.
+#
+# install_openclaw_plugin <full-plugin-id> <bare-id-for-list-match>
+#   e.g. install_openclaw_plugin "@openclaw/codex" "codex"
 # ==============================================================
-OPENCLAW_CODEX_PLUGIN="@openclaw/codex"
+install_openclaw_plugin() {
+    local plugin_id="$1" bare_id="$2"
 
-install_codex_plugin() {
     if ! command -v openclaw &>/dev/null; then
-        log_warn "openclaw CLI not found — skipping ${OPENCLAW_CODEX_PLUGIN} plugin install"
+        log_warn "openclaw CLI not found — skipping ${plugin_id} plugin install"
         return 0
     fi
 
     local listing
     listing="$(openclaw plugins list --json 2>/dev/null || true)"
-    if printf '%s' "$listing" | grep -Eq '"(@openclaw/codex|codex)"'; then
-        log "${OPENCLAW_CODEX_PLUGIN} plugin already installed — skipping"
+    if printf '%s' "$listing" | grep -Eq "\"($plugin_id|$bare_id)\""; then
+        log "${plugin_id} plugin already installed — skipping"
         return 0
     fi
 
-    log "Installing ${OPENCLAW_CODEX_PLUGIN} plugin..."
-    if openclaw plugins install "$OPENCLAW_CODEX_PLUGIN" --accept-capabilities; then
-        log_success "${OPENCLAW_CODEX_PLUGIN} plugin installed"
+    log "Installing ${plugin_id} plugin..."
+    if openclaw plugins install "$plugin_id" --accept-capabilities; then
+        log_success "${plugin_id} plugin installed"
     else
-        log_warn "Failed to install ${OPENCLAW_CODEX_PLUGIN} plugin — continuing without it"
+        log_warn "Failed to install ${plugin_id} plugin — continuing without it"
     fi
+}
+
+install_codex_plugin() {
+    install_openclaw_plugin "@openclaw/codex" "codex"
+}
+
+install_slack_plugin() {
+    install_openclaw_plugin "@openclaw/slack" "slack"
 }
 
 # ==============================================================
@@ -963,6 +974,7 @@ run_setup() {
     enable_channels
     install_cli
     install_codex_plugin
+    install_slack_plugin
     configure_openrouter
     install_openclaw_peer_deps
     log "Running config doctor..."
