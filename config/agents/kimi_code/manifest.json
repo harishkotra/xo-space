@@ -1,0 +1,26 @@
+{
+  "name": "kimi_code",
+  "binary": "kimi",
+  "install_url": "https://kimi.moonshot.cn",
+  "home_dir": "~/.kimi-code",
+  "env_file": "~/.kimi-code/.env",
+  "config_file": "~/.kimi-code/config.json",
+  "agents_dir": "~/.kimi-code/sessions",
+  "workspace_dir": "~/xo-projects",
+  "provisioning_log": "~/.kimi-code/provisioning.log",
+  "cwd": "~",
+  "cli_timeout_seconds": 300,
+  "api": {
+    "session_header": ""
+  },
+  "model_prefix": "kimi",
+  "models": {
+    "default": "kimi-k1.5",
+    "catalog": ["kimi-k1.5", "kimi-latest"]
+  },
+  "runtime_setup": {
+    "installs_cli": false,
+    "session_globs": ["sessions/*.json", "sessions/*.jsonl", "logs/*.json", "logs/*.jsonl"],
+    "secrets": []
+  }
+}

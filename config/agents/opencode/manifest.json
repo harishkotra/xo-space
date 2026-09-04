@@ -1,0 +1,26 @@
+{
+  "name": "opencode",
+  "binary": "opencode",
+  "install_url": "https://github.com/opencode-ai/opencode",
+  "home_dir": "~/.local/share/opencode",
+  "env_file": "~/.config/opencode/.env",
+  "config_file": "~/.config/opencode/config.json",
+  "agents_dir": "~/.local/share/opencode/sessions",
+  "workspace_dir": "~/xo-projects",
+  "provisioning_log": "~/.local/share/opencode/provisioning.log",
+  "cwd": "~",
+  "cli_timeout_seconds": 300,
+  "api": {
+    "session_header": ""
+  },
+  "model_prefix": "opencode",
+  "models": {
+    "default": "opencode-v1",
+    "catalog": ["opencode-v1"]
+  },
+  "runtime_setup": {
+    "installs_cli": false,
+    "session_globs": ["*.json", "*.jsonl", "sessions/*.json", "sessions/*.jsonl"],
+    "secrets": []
+  }
+}
