@@ -14,9 +14,24 @@
     "session_header": ""
   },
   "model_prefix": "grok",
+  "model_capabilities": {
+    "function_calling": true,
+    "vision": true,
+    "reasoning": true,
+    "json_output": true,
+    "max_context": 128000,
+    "max_output": 16384
+  },
   "models": {
     "default": "grok-code",
-    "catalog": ["grok-code", "grok-2", "grok-beta"]
+    "catalog": [
+      "grok-code",
+      "grok-2",
+      "grok-2-vision",
+      "grok-beta",
+      "local/ollama",
+      "custom/openai-compatible"
+    ]
   },
   "runtime_setup": {
     "installs_cli": false,

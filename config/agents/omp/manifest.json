@@ -14,9 +14,23 @@
     "session_header": ""
   },
   "model_prefix": "omp",
+  "model_capabilities": {
+    "function_calling": true,
+    "vision": true,
+    "reasoning": true,
+    "json_output": true,
+    "max_context": 200000,
+    "max_output": 16384
+  },
   "models": {
     "default": "omp-agent-v1",
-    "catalog": ["omp-agent-v1"]
+    "catalog": [
+      "omp-agent-v1",
+      "omp-coder-large",
+      "local/ollama",
+      "local/vllm",
+      "custom/openai-compatible"
+    ]
   },
   "runtime_setup": {
     "installs_cli": false,

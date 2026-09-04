@@ -14,13 +14,38 @@
     "session_header": ""
   },
   "model_prefix": "opencode",
+  "model_capabilities": {
+    "function_calling": true,
+    "vision": true,
+    "reasoning": true,
+    "json_output": true,
+    "max_context": 200000,
+    "max_output": 16384
+  },
   "models": {
-    "default": "opencode-v1",
-    "catalog": ["opencode-v1"]
+    "default": "deepseek-v4-flash-free",
+    "catalog": [
+      "deepseek-v4-flash-free",
+      "deepseek-reasoner",
+      "deepseek-coder",
+      "openai/gpt-oss-20b",
+      "qwen/qwen3-coder-30b",
+      "claude-sonnet-4-5",
+      "claude-haiku-4-5",
+      "gpt-5.1-codex",
+      "gpt-5.2",
+      "glm-4.7",
+      "ornith-1.0-35b",
+      "hy3-free",
+      "north-mini-code-free",
+      "local/ollama",
+      "local/vllm",
+      "custom/openai-compatible"
+    ]
   },
   "runtime_setup": {
     "installs_cli": false,
-    "session_globs": ["*.json", "*.jsonl", "sessions/*.json", "sessions/*.jsonl"],
+    "session_globs": ["*.json", "*.jsonl", "sessions/*.json", "sessions/*.jsonl", "opencode.db"],
     "secrets": []
   }
 }

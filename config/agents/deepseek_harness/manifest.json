@@ -14,9 +14,25 @@
     "session_header": ""
   },
   "model_prefix": "deepseek",
+  "model_capabilities": {
+    "function_calling": true,
+    "vision": true,
+    "reasoning": true,
+    "json_output": true,
+    "max_context": 128000,
+    "max_output": 16384
+  },
   "models": {
     "default": "deepseek-reasoner",
-    "catalog": ["deepseek-reasoner", "deepseek-coder", "deepseek-chat"]
+    "catalog": [
+      "deepseek-reasoner",
+      "deepseek-coder",
+      "deepseek-chat",
+      "deepseek-v4-flash-free",
+      "local/ollama-deepseek-r1",
+      "local/vllm-deepseek-v3",
+      "custom/openai-compatible"
+    ]
   },
   "runtime_setup": {
     "installs_cli": false,
