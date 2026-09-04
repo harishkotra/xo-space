@@ -23,10 +23,11 @@
     "max_output": 16384
   },
   "models": {
-    "default": "kimi-k1.5",
+    "default": "kimi-k3",
     "catalog": [
-      "kimi-k1.5",
+      "kimi-k3",
       "kimi-k2.5",
+      "kimi-k1.5",
       "kimi-latest",
       "moonshot-v1-8k",
       "moonshot-v1-32k",
